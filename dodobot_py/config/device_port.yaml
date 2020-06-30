@@ -1,0 +1,7 @@
+# baud_rate: 500000
+baud_rate: 115200
+# address: /dev/serial0
+address: /dev/serial/by-id/usb-Teensyduino_USB_Serial_5816830-if00
+timeout: 5.0
+write_timeout: 5.0
+update_rate_hz: 60

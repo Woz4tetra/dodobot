@@ -9,7 +9,6 @@ from lib.logger_manager import LoggerManager
 from lib.exceptions import ShutdownException, LowBatteryException
 from ..node import Node
 
-rover_config = ConfigManager.get_robot_config()
 device_port_config = ConfigManager.get_device_port_config()
 logger = LoggerManager.get_logger()
 
@@ -103,11 +102,13 @@ class Robot(Node):
             logger.error("An exception occurred in the read thread", exc_info=True)
             self.thread_exception = e
 
-    def set_speed(self, speed_A, speed_B):
-        speed_A = str(int(speed_A))
-        speed_B = str(int(speed_B))
-        self.write("ma%s" % speed_A)
-        self.write("mb%s" % speed_B)
+    def set_speed_A(self, speed):
+        speed = str(int(speed))
+        self.write("ma%s" % speed)
+
+    def set_speed_B(self, speed):
+        speed = str(int(speed))
+        self.write("mb%s" % speed)
 
     def set_gripper(self, state):
         assert state in ("o", "c", "t")
@@ -116,6 +117,24 @@ class Robot(Node):
     def toggle_tilter(self):
         self.write("b")
 
+    def set_stepper(self, speed):
+        speed = str(int(speed))
+        self.write("l%s" % speed)
+
     def update_joystick(self):
-        for codename, event in self.joystick.get_events():
-            print(codename, event)
+        for name, value in self.joystick.get_events():
+            if name == "y":
+                self.set_speed_A(-255 * value)
+            elif name == "ry":
+                self.set_speed_B(-255 * value)
+
+            elif name == "b" and value == 1:
+                self.set_gripper("t")
+            elif name == "a" and value == 1:
+                self.toggle_tilter()
+
+            elif name == "hat0y":
+                # self.set_stepper(-value * 420000000)
+                self.set_stepper(-value * 200000000)
+
+            print(name, value)
