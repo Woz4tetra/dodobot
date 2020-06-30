@@ -1,5 +1,4 @@
 from .log_config import LogConfig
-from .robot_config import RobotConfig
 from .device_port_config import DevicePortConfig
 from .general_config import GeneralConfig
 from .joystick_config import JoystickConfig
@@ -7,7 +6,6 @@ from .joystick_config import JoystickConfig
 
 class ConfigManager:
     log_config = None
-    robot_config = None
     device_port_config = None
     general_config = None
     joystick_config = None
@@ -20,12 +18,6 @@ class ConfigManager:
         if cls.log_config is None:
             cls.log_config = LogConfig()
         return cls.log_config
-
-    @classmethod
-    def get_robot_config(cls):
-        if cls.robot_config is None:
-            cls.robot_config = RobotConfig()
-        return cls.robot_config
 
     @classmethod
     def get_device_port_config(cls):

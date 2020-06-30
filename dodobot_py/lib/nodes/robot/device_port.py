@@ -82,7 +82,7 @@ class DevicePort:
 
     def is_open(self):
         """Wrapper for isOpen"""
-        return self.device.isOpen()
+        return self.device is not None and self.device.isOpen()
 
     def __read(self):
         if self.device.isOpen():
