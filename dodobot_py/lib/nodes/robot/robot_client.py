@@ -52,6 +52,8 @@ class Robot(Node):
         self.thread.start()
         logger.info("Read thread started")
         time.sleep(1.0)
+
+        self.write("f")
         self.prev_command_time = time.time()
 
     def update(self):
