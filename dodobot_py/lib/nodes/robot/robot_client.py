@@ -34,6 +34,10 @@ class Robot(Node):
         self.read_lock = threading.Lock()
 
         self.joystick = None
+        self.forward_val = 0.0
+        self.rotate_val = 0.0
+        self.stepper_val = 0.0
+        self.prev_command_time = 0.0
 
         super(Robot, self).__init__(session)
 
@@ -48,13 +52,23 @@ class Robot(Node):
         self.thread.start()
         logger.info("Read thread started")
         time.sleep(1.0)
+        self.prev_command_time = time.time()
 
     def update(self):
         if not self.read_task_running():
             logger.error("Error detected in read task. Raising exception")
             raise self.thread_exception
 
-        self.update_joystick()
+        check_timer = self.update_joystick()
+
+        if check_timer:
+            self.prev_command_time = time.time()
+        if time.time() - self.prev_command_time > 1.0:
+            self.set_speed_A(0)
+            self.set_speed_B(0)
+            self.set_stepper(0)
+            self.prev_command_time = time.time()
+
 
     def stop(self):
         if self.should_stop:
@@ -122,19 +136,38 @@ class Robot(Node):
         self.write("l%s" % speed)
 
     def update_joystick(self):
+        set_motor_speed = False
+        set_stepper_speed = False
         for name, value in self.joystick.get_events():
-            if name == "y":
-                self.set_speed_A(-255 * value)
-            elif name == "ry":
-                self.set_speed_B(-255 * value)
-
+            if name == "x" or name == "y":
+                if name == "y":
+                    if value != self.forward_val:
+                        self.forward_val = value
+                        set_motor_speed = True
+                elif name == "x":
+                    if value != self.rotate_val:
+                        self.rotate_val = value
+                        set_motor_speed = True
+                set_motor_speed = True
             elif name == "b" and value == 1:
                 self.set_gripper("t")
             elif name == "a" and value == 1:
                 self.toggle_tilter()
 
-            elif name == "hat0y":
-                # self.set_stepper(-value * 420000000)
-                self.set_stepper(-value * 200000000)
-
+            elif name == "ry":
+                if value != self.stepper_val:
+                    self.stepper_val = value
+                    # self.set_stepper(-value * 420000000)
+                    self.set_stepper(-self.stepper_val * 200000000)
+                    set_stepper_speed = True
             print(name, value)
+
+        if set_motor_speed:
+            print(self.forward_val, self.rotate_val)
+
+            speed_A = self.forward_val - self.rotate_val
+            speed_B = self.forward_val + self.rotate_val
+            self.set_speed_A(-255 * speed_A)
+            self.set_speed_B(-255 * speed_B)
+
+        return set_motor_speed or set_stepper_speed
