@@ -190,7 +190,7 @@ class Robot(Node):
             raise ShutdownException
 
     def write_shutdown_signal(self):
-        self.write("shutdown")
+        self.write("shutdown", "dodobot")
 
     def set_reporting(self, state):
         self.write("[]", 1 if state else 0)
@@ -286,6 +286,8 @@ class Robot(Node):
             elif name == "x" and value == 1:
                 logger.info("Toggling tilter")
                 self.tilter_toggle()
+            elif name == "y" and value == 1:
+                self.write_shutdown_signal()
         self.update_drive_command()
         self.check_shutdown_timer()
 
