@@ -5,10 +5,10 @@ from .config import Config
 
 class LogConfig(Config):
     def __init__(self):
-        self.name = "rover6"
+        self.name = "dodobot"
         self.level = logging.DEBUG
-        self.file_name = "rover6"
-        self.suffix = "%Y-%m-%d.log"
+        self.file_name = "dodobot.log"
+        self.suffix = "%Y-%m-%d"
         self.format = "%(levelname)s\t%(asctime)s\t[%(name)s, %(filename)s:%(lineno)d]\t%(message)s"
 
         super(LogConfig, self).__init__("logging.yaml")

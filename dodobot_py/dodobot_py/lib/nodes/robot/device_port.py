@@ -26,9 +26,6 @@ class DevicePort:
         self.out_buf_max_bytes = 16 * 12
         self.in_buf_max_bytes = 16 * 8
 
-        self.read_buffer = b""
-        self.write_buffer = b""
-
     def configure(self):
         logger.debug("Attempting to open address '%s'" % self.address)
         self.device = serial.Serial(
@@ -75,7 +72,7 @@ class DevicePort:
         :return: None if an OSError occurred, otherwise an integer value indicating the buffer size
         """
         try:
-            return self.device.in_waiting
+            return self.device.inWaiting()
         except OSError:
             logger.error("Failed to check serial. Is there a loose connection?")
             raise
@@ -84,39 +81,16 @@ class DevicePort:
         """Wrapper for isOpen"""
         return self.device is not None and self.device.isOpen()
 
-    def __read(self):
+    def read(self, size=None):
         if self.device.isOpen():
-            self.read_buffer += self.device.read(self.in_waiting())
+            if size is None:
+                size = self.in_waiting()
+            return self.device.read(size)
         else:
             raise DevicePortReadException("Serial port wasn't open for reading...")
 
-    def read(self, size):
-        while len(self.read_buffer) < size:
-            self.__read()
-            # time.sleep(0.001)
-        result = self.read_buffer[:size]
-        self.read_buffer = self.read_buffer[size:]
-        return result
-
     def readline(self):
-        newline_found = False
-
-        index = 0
-        while not newline_found:
-            self.__read()
-            try:
-                index = self.read_buffer.index(b"\n")
-                newline_found = True
-            except ValueError:
-                continue
-
-        index += 1
-        result = self.read_buffer[:index]
-        self.read_buffer = self.read_buffer[index:]
-        return result
-
-    def newline_available(self):
-        return b"\n" in self.read_buffer
+        return self.device.readline()
 
     def stop(self):
         if self.is_open():
