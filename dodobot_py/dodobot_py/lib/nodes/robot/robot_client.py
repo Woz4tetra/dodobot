@@ -89,6 +89,12 @@ class Robot(Node):
         self.device_start_time = 0.0
         self.offset_time_ms = 0
 
+        self.prev_drive_command_time = 0.0
+        self.drive_command_timeout = 1.0
+
+        self.drive_cmd_forward = 0.0
+        self.drive_cmd_rotate = 0.0
+
         super(Robot, self).__init__(session)
 
     def start(self):
@@ -184,6 +190,9 @@ class Robot(Node):
     def home_linear(self):
         self.write("linear", 4)
 
+    def set_drive_motors(self, speed_A, speed_B):
+        self.write("drive", float(speed_A), float(speed_B))
+
     def check_ready(self):
         self.write("?", "dodobot")
 
@@ -211,8 +220,39 @@ class Robot(Node):
         if not self.read_task_running():
             logger.error("Error detected in read task. Raising exception")
             raise self.thread_exception
-        self.home_linear()
-        time.sleep(10.0)
+
+        for name, value in self.joystick.get_axis_events():
+            if name == "ry":
+                linear_vel = int(-200000000 * value)
+                logger.info("Setting linear vel: %s" % linear_vel)
+                self.set_linear_vel(linear_vel)
+            elif name == "x":
+                self.drive_cmd_rotate = 6800 * value
+                self.prev_drive_command_time = time.time()
+            elif name == "y":
+                self.drive_cmd_forward = -6800 * value
+                self.prev_drive_command_time = time.time()
+        for name, value in self.joystick.get_button_events():
+            if name == "a" and value == 1:
+                logger.info("Homing linear")
+                self.home_linear()
+            elif name == "b" and value == 1:
+                logger.info("Toggling gripper")
+                self.toggle_gripper(300)
+            elif name == "x" and value == 1:
+                logger.info("Toggling tilter")
+                self.tilter_toggle()
+
+        self.update_drive_command()
+
+    def update_drive_command(self):
+        if time.time() - self.prev_drive_command_time > self.drive_command_timeout:
+            self.set_drive_motors(0, 0)
+            return
+
+        cmd_A = self.drive_cmd_forward + self.drive_cmd_rotate
+        cmd_B = self.drive_cmd_forward - self.drive_cmd_rotate
+        self.set_drive_motors(cmd_A, cmd_B)
 
     def stop(self):
         if self.should_stop:
@@ -314,7 +354,7 @@ class Robot(Node):
         logger.debug("buffer: %s" % buffer.decode())
 
         if len(buffer) < 5:
-            logger.error("Received packet has an invalid number of characters! %s" % buffer.decode())
+            logger.error("Received packet has an invalid number of characters! %s" % repr(buffer.decode()))
             self.read_packet_num += 1
             return False
 
@@ -327,7 +367,7 @@ class Robot(Node):
         recv_checksum = int(self.read_buffer[-2:], 16)
         self.read_buffer = self.read_buffer[:-2]
         if calc_checksum != recv_checksum:
-            logger.error("Checksum failed! recv %s != calc %s" % (recv_checksum, calc_checksum))
+            logger.error("Checksum failed! recv %s != calc %s. %s" % (recv_checksum, calc_checksum, repr(self.read_buffer)))
             logger.debug("Buffer: %s" % self.read_buffer)
             self.read_packet_num += 1
             return False
@@ -356,7 +396,7 @@ class Robot(Node):
         try:
             self.process_packet(category)
         except BaseException as e:
-            logger.error("Exception while processing packet: %s" % str(e), exc_info=True)
+            logger.error("Exception while processing packet %s: %s" % (self.read_buffer, str(e)), exc_info=True)
             return False
 
         self.read_packet_num += 1
