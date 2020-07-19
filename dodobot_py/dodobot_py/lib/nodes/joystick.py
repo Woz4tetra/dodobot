@@ -4,6 +4,7 @@ import os
 import time
 import array
 import struct
+import select
 from fcntl import ioctl
 
 
@@ -181,7 +182,13 @@ class Joystick(Node):
                 if self.jsdev:
                     logger.info("Joystick opened with address {}".format(self.address))
             return
-        evbuf = self.jsdev.read(8)
+        r, w, e = select.select([self.jsdev], [], [], 0)
+
+        if self.jsdev in r:
+            evbuf = self.jsdev.read(8)
+        else:
+            return
+
         if evbuf:
             evtime, value, type, number = struct.unpack('IhBB', evbuf)
 

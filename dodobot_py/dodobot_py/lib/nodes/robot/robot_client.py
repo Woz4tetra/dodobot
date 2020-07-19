@@ -94,6 +94,13 @@ class Robot(Node):
 
         self.drive_cmd_forward = 0.0
         self.drive_cmd_rotate = 0.0
+        self.prev_cmd_A = 0.0
+        self.prev_cmd_B = 0.0
+
+        self.shutdown_timer = 0.0
+        self.shutdown_starting = False
+        self.prev_display_countdown = None
+        self.shutdown_time_limit = 3.0
 
         super(Robot, self).__init__(session)
 
@@ -141,12 +148,49 @@ class Robot(Node):
             self.power_state["current_mA"] = self.parsed_data[1]
             self.power_state["power_mW"] = self.parsed_data[2]
             self.power_state["load_voltage_V"] = self.parsed_data[3]
+            logger.info("Voltage: %sV, Current: %smA" % (self.power_state["load_voltage_V"], self.power_state["current_mA"]))
 
         elif category == "state" and self.parse_segments("uddd"):
             self.robot_state["recv_time"] = self.get_device_time(self.parsed_data[0])
             self.robot_state["is_active"] = self.parsed_data[1]
             self.robot_state["battery_ok"] = self.parsed_data[2]
             self.robot_state["motors_active"] = self.parsed_data[3]
+
+        elif category == "latch" and self.parse_segments("ud"):
+            button_state = self.parsed_data[1]
+            if button_state == 1:
+                self.start_shutdown()
+            else:
+                self.cancel_shutdown()
+
+    def start_shutdown(self):
+        logger.info("Starting shutdown timer")
+        self.shutdown_timer = time.time()
+        self.shutdown_starting = True
+
+    def cancel_shutdown(self):
+        logger.info("Canceling shutdown")
+        self.shutdown_starting = False
+        self.prev_display_countdown = None
+
+    def check_shutdown_timer(self):
+        if not self.shutdown_starting:
+            return
+
+        current_time = time.time()
+        countdown_time = self.shutdown_time_limit - (current_time - self.shutdown_timer)
+        countdown_time_int = int(countdown_time) + 1
+        if countdown_time_int != self.prev_display_countdown:
+            logger.info("%s..." % countdown_time_int)
+            self.prev_display_countdown = countdown_time_int
+        if countdown_time <= 0.0:
+            logger.info("Shutting down")
+            self.write_shutdown_signal()
+            time.sleep(0.15)
+            raise ShutdownException
+
+    def write_shutdown_signal(self):
+        self.write("shutdown")
 
     def set_reporting(self, state):
         self.write("[]", 1 if state else 0)
@@ -242,17 +286,20 @@ class Robot(Node):
             elif name == "x" and value == 1:
                 logger.info("Toggling tilter")
                 self.tilter_toggle()
-
         self.update_drive_command()
+        self.check_shutdown_timer()
 
     def update_drive_command(self):
         if time.time() - self.prev_drive_command_time > self.drive_command_timeout:
-            self.set_drive_motors(0, 0)
-            return
-
-        cmd_A = self.drive_cmd_forward + self.drive_cmd_rotate
-        cmd_B = self.drive_cmd_forward - self.drive_cmd_rotate
-        self.set_drive_motors(cmd_A, cmd_B)
+            cmd_A = 0.0
+            cmd_B = 0.0
+        else:
+            cmd_A = self.drive_cmd_forward + self.drive_cmd_rotate
+            cmd_B = self.drive_cmd_forward - self.drive_cmd_rotate
+        if self.prev_cmd_A != cmd_A or self.prev_cmd_B != cmd_B:
+            self.set_drive_motors(cmd_A, cmd_B)
+            self.prev_cmd_A = cmd_A
+            self.prev_cmd_B = cmd_B
 
     def stop(self):
         if self.should_stop:
@@ -364,11 +411,15 @@ class Robot(Node):
         calc_checksum &= 255
 
         self.read_buffer = buffer.decode()
-        recv_checksum = int(self.read_buffer[-2:], 16)
+        try:
+            recv_checksum = int(self.read_buffer[-2:], 16)
+        except ValueError as e:
+            logger.error("Failed to parsed checksum as hex int: %s" % repr(self.read_buffer))
+            self.read_packet_num += 1
+            return False
         self.read_buffer = self.read_buffer[:-2]
         if calc_checksum != recv_checksum:
             logger.error("Checksum failed! recv %s != calc %s. %s" % (recv_checksum, calc_checksum, repr(self.read_buffer)))
-            logger.debug("Buffer: %s" % self.read_buffer)
             self.read_packet_num += 1
             return False
 
