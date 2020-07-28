@@ -4,6 +4,7 @@ import os
 import time
 import array
 import struct
+import select
 from fcntl import ioctl
 
 
@@ -105,7 +106,8 @@ class Joystick(Node):
         self.num_axes = 0
         self.num_buttons = 0
 
-        self.events = []
+        self.axis_events = []
+        self.button_events = []
 
     def start(self):
         self.open_joystick()
@@ -160,9 +162,15 @@ class Joystick(Node):
             self.button_map.append(btn_name)
             self.button_states[btn_name] = 0
 
-    def get_events(self):
-        while len(self.events) > 0:
-            yield self.events.pop()
+    def get_axis_events(self):
+        while len(self.axis_events) > 0:
+            yield self.axis_events.pop()
+
+        raise StopIteration
+
+    def get_button_events(self):
+        while len(self.button_events) > 0:
+            yield self.button_events.pop()
 
         raise StopIteration
 
@@ -174,7 +182,13 @@ class Joystick(Node):
                 if self.jsdev:
                     logger.info("Joystick opened with address {}".format(self.address))
             return
-        evbuf = self.jsdev.read(8)
+        r, w, e = select.select([self.jsdev], [], [], 0)
+
+        if self.jsdev in r:
+            evbuf = self.jsdev.read(8)
+        else:
+            return
+
         if evbuf:
             evtime, value, type, number = struct.unpack('IhBB', evbuf)
 
@@ -185,7 +199,7 @@ class Joystick(Node):
                 button = self.button_map[number]
                 if button:
                     self.button_states[button] = value
-                    self.events.append((button, value))
+                    self.button_events.append((button, value))
                     # if value:
                     #     logger.info("%s pressed" % (button))
                     # else:
@@ -196,5 +210,5 @@ class Joystick(Node):
                 if axis:
                     fvalue = value / 32767.0
                     self.axis_states[axis] = fvalue
-                    self.events.append((axis, fvalue))
+                    self.axis_events.append((axis, fvalue))
                     # logger.info("%s: %.3f" % (axis, fvalue))
