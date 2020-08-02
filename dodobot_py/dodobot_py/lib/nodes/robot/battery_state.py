@@ -21,6 +21,7 @@ class BatteryState:
         self.power_mW = 0.0
         self.voltage_V = 0.0
         self.prev_critical_time = None
+        self.prev_V = 0.0
 
     def update_state(self, power_state):
         self.recv_time = power_state["recv_time"]
@@ -48,9 +49,10 @@ class BatteryState:
 
         if state != self.state:
             self.state = state
-            return True
-        else:
-            return False
+            if abs(self.voltage_V - self.prev_V) > 0.25:
+                self.prev_V = self.voltage_V
+                return True
+        return False
 
     def should_shutdown(self):
         return (
