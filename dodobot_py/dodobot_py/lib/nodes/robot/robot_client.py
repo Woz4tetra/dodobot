@@ -90,7 +90,7 @@ class Robot(Node):
         self.offset_time_ms = 0
 
         self.prev_drive_command_time = 0.0
-        self.drive_command_timeout = 1.0
+        self.drive_command_timeout = 5.0
 
         self.drive_cmd_forward = 0.0
         self.drive_cmd_rotate = 0.0
@@ -156,7 +156,7 @@ class Robot(Node):
             self.robot_state["battery_ok"] = self.parsed_data[2]
             self.robot_state["motors_active"] = self.parsed_data[3]
 
-        elif category == "latch" and self.parse_segments("ud"):
+        elif category == "latch_btn" and self.parse_segments("ud"):
             button_state = self.parsed_data[1]
             if button_state == 1:
                 self.start_shutdown()
@@ -171,6 +171,8 @@ class Robot(Node):
             else:
                 logger.warning("Received name doesn't match expected: %s" % name)
 
+        elif category == "unlatch" and self.parse_segments("u"):
+            logger.warning("Unlatch signal received! System unlatching soon.")
 
     def start_shutdown(self):
         logger.info("Starting shutdown timer")
@@ -295,7 +297,7 @@ class Robot(Node):
                 self.home_linear()
             elif name == "b" and value == 1:
                 logger.info("Toggling gripper")
-                self.toggle_gripper(300)
+                self.toggle_gripper(750)
             elif name == "x" and value == 1:
                 logger.info("Toggling tilter")
                 self.tilter_toggle()
