@@ -26,7 +26,8 @@ class Robot(Node):
 
         self.prev_time_command_update = time.time()
         self.should_stop = False
-        self.thread = threading.Thread(target=self.read_task, args=(lambda: self.should_stop,))
+        self.should_stop_fn = (lambda: self.should_stop,)
+        self.thread = threading.Thread(target=self.read_task, args=self.should_stop_fn)
         self.thread_exception = None
 
         self.read_update_rate_hz = device_port_config.update_rate_hz
@@ -104,7 +105,8 @@ class Robot(Node):
         self.prev_display_countdown = None
         self.shutdown_time_limit = 3.0
 
-        self.write_date_timer = threading.Timer(0.5, self.write_date)
+        self.write_date_thread = threading.Thread(target=self.write_date_task, args=self.should_stop_fn)
+        self.write_date_delay = 0.5
 
         self.battery_state = BatteryState()
 
@@ -127,7 +129,7 @@ class Robot(Node):
 
         self.set_active(True)
 
-        self.write_date_timer.start()
+        self.write_date_thread.start()
 
     def process_packet(self, category):
         if category == "txrx" and self.parse_segments("dd"):
@@ -262,6 +264,16 @@ class Robot(Node):
         date_str = datetime.datetime.now().strftime("%I:%M:%S%p")
         self.write("date", date_str)
 
+    def write_date_task(self, should_stop):
+        try:
+            while True:
+                if should_stop():
+                    return
+                self.write_date()
+                time.sleep(self.write_date_delay)
+        except BaseException as e:
+            logger.error(str(e), exc_info=True)
+
     def check_ready(self):
         self.write("?", "dodobot")
 
@@ -335,8 +347,6 @@ class Robot(Node):
 
         self.should_stop = True
         logger.info("Set read thread stop flag")
-
-        self.write_date_timer.cancel()
 
         self.set_reporting(False)
         self.set_active(False)
