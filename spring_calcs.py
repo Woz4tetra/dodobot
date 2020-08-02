@@ -82,8 +82,8 @@ def main():
 
     thetas = np.linspace(0.0, math.radians(22.0), 50)
     ls = []
-    # spring_spacing = np.linspace(0.048, 0.052, 15)
-    spring_spacing = [physical_parameters["la"]]
+    spring_spacing = np.linspace(0.048, 0.052, 10)
+    # spring_spacing = [physical_parameters["la"]]
 
     plt.figure(2)
     for length in spring_spacing:
