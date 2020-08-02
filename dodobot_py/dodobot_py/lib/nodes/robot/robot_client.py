@@ -486,6 +486,10 @@ class Robot(Node):
 
         try:
             self.process_packet(category)
+        except ShutdownException:
+            raise
+        except LowBatteryException:
+            raise
         except BaseException as e:
             logger.error("Exception while processing packet %s: %s" % (self.read_buffer, str(e)), exc_info=True)
             return False

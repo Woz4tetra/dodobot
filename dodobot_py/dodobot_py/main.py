@@ -17,7 +17,7 @@ def shutdown(session):
     logger.warn("Shutdown function called. Shutting down everything.")
     session.stop()
     subprocess.call("sudo shutdown -h now", shell=True)
-    sys.exit()
+    # sys.exit()
 
 
 def close(master):
