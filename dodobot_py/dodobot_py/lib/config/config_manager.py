@@ -3,6 +3,7 @@ from .device_port_config import DevicePortConfig
 from .general_config import GeneralConfig
 from .joystick_config import JoystickConfig
 from .data_log_config import DataLogConfig
+from .battery_config import BatteryConfig
 
 
 class ConfigManager:
@@ -11,6 +12,7 @@ class ConfigManager:
     general_config = None
     joystick_config = None
     data_log_config = None
+    battery_config = None
 
     def __init__(self):
         raise Exception("{} is class only".format(self.__class__.__name__))
@@ -44,3 +46,10 @@ class ConfigManager:
         if cls.data_log_config is None:
             cls.data_log_config = DataLogConfig()
         return cls.data_log_config
+
+    @classmethod
+    def get_battery_config(cls):
+        if cls.battery_config is None:
+            cls.battery_config = BatteryConfig()
+        return cls.battery_config
+

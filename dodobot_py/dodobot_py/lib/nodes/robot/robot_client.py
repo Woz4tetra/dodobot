@@ -1,13 +1,13 @@
 import time
 import datetime
 import threading
-import numpy as np
 
-from .device_port import DevicePort, DevicePortReadException, DevicePortWriteException
+from .device_port import DevicePort
 from lib.config import ConfigManager
 from lib.logger_manager import LoggerManager
 from lib.exceptions import ShutdownException, LowBatteryException, DeviceNotReadyException
 from ..node import Node
+from .battery_state import BatteryState
 
 device_port_config = ConfigManager.get_device_port_config()
 logger = LoggerManager.get_logger()
@@ -15,6 +15,8 @@ logger = LoggerManager.get_logger()
 
 class Robot(Node):
     def __init__(self, session):
+        super(Robot, self).__init__(session)
+
         self.device = DevicePort(
             device_port_config.address,
             device_port_config.baud_rate,
@@ -44,22 +46,22 @@ class Robot(Node):
         self.PACKET_SEP_STR = '\t'
 
         self.ready_state = {
-            "name": "",
+            "name"    : "",
             "is_ready": False,
-            "time_ms": 0
+            "time_ms" : 0
         }
 
         self.power_state = {
-            "recv_time": 0.0,
-            "current_mA": 0.0,
-            "power_mW": 0.0,
+            "recv_time"     : 0.0,
+            "current_mA"    : 0.0,
+            "power_mW"      : 0.0,
             "load_voltage_V": 0.0
         }
 
         self.robot_state = {
-            "recv_time": 0.0,
-            "is_active": False,
-            "battery_ok": True,
+            "recv_time"    : 0.0,
+            "is_active"    : False,
+            "battery_ok"   : True,
             "motors_active": False,
         }
 
@@ -102,7 +104,9 @@ class Robot(Node):
         self.prev_display_countdown = None
         self.shutdown_time_limit = 3.0
 
-        super(Robot, self).__init__(session)
+        self.write_date_timer = threading.Timer(0.5, self.write_date)
+
+        self.battery_state = BatteryState()
 
     def start(self):
         self.joystick = self.session.joystick
@@ -122,6 +126,8 @@ class Robot(Node):
         self.set_reporting(True)
 
         self.set_active(True)
+
+        self.write_date_timer.start()
 
     def process_packet(self, category):
         if category == "txrx" and self.parse_segments("dd"):
@@ -148,7 +154,11 @@ class Robot(Node):
             self.power_state["current_mA"] = self.parsed_data[1]
             self.power_state["power_mW"] = self.parsed_data[2]
             self.power_state["load_voltage_V"] = self.parsed_data[3]
-            logger.info("Voltage: %sV, Current: %smA" % (self.power_state["load_voltage_V"], self.power_state["current_mA"]))
+            state_changed = self.battery_state.set(self.power_state)
+            if state_changed:
+                self.battery_state.log_state()
+            if self.battery_state.should_shutdown():
+                raise LowBatteryException("Battery is critically low: %{load_voltage_V:0.2f}!! Shutting down.".format(**self.power_state))
 
         elif category == "state" and self.parse_segments("uddd"):
             self.robot_state["recv_time"] = self.get_device_time(self.parsed_data[0])
@@ -163,6 +173,9 @@ class Robot(Node):
             else:
                 self.cancel_shutdown()
 
+        elif category == "unlatch" and self.parse_segments("u"):
+            logger.warning("Unlatch signal received! System unlatching soon.")
+
         elif category == "shutdown" and self.parse_segments("s"):
             name = self.parsed_data[0]
             if name == "dodobot":
@@ -170,9 +183,6 @@ class Robot(Node):
                 raise ShutdownException
             else:
                 logger.warning("Received name doesn't match expected: %s" % name)
-
-        elif category == "unlatch" and self.parse_segments("u"):
-            logger.warning("Unlatch signal received! System unlatching soon.")
 
     def start_shutdown(self):
         logger.info("Starting shutdown timer")
@@ -326,6 +336,8 @@ class Robot(Node):
         self.should_stop = True
         logger.info("Set read thread stop flag")
 
+        self.write_date_timer.cancel()
+
         self.set_reporting(False)
         self.set_active(False)
 
@@ -356,7 +368,7 @@ class Robot(Node):
             logger.debug("Writing %s" % str(packet))
             self.device.write(packet)
             self.write_packet_num += 1
-            time.sleep(0.0005)
+            time.sleep(0.0005)  # give the microcontroller a chance to not drop the next packet
 
     def wait_for_packet_start(self):
         begin_time = time.time()
@@ -434,7 +446,8 @@ class Robot(Node):
             return False
         self.read_buffer = self.read_buffer[:-2]
         if calc_checksum != recv_checksum:
-            logger.error("Checksum failed! recv %s != calc %s. %s" % (recv_checksum, calc_checksum, repr(self.read_buffer)))
+            logger.error(
+                "Checksum failed! recv %s != calc %s. %s" % (recv_checksum, calc_checksum, repr(self.read_buffer)))
             self.read_packet_num += 1
             return False
 
@@ -442,7 +455,8 @@ class Robot(Node):
 
         # get packet num segment
         if not self.get_next_segment():
-            logger.error("Failed to find packet number segment %s! %s" % (repr(self.current_segment), repr(self.read_buffer)))
+            logger.error(
+                "Failed to find packet number segment %s! %s" % (repr(self.current_segment), repr(self.read_buffer)))
             self.read_packet_num += 1
             return False
         self.recv_packet_num = int(self.current_segment)
@@ -454,7 +468,8 @@ class Robot(Node):
 
         # find category segment
         if not self.get_next_segment():
-            logger.error("Failed to find category segment %s! %s" % (repr(self.current_segment), repr(self.read_buffer)))
+            logger.error(
+                "Failed to find category segment %s! %s" % (repr(self.current_segment), repr(self.read_buffer)))
             self.read_packet_num += 1
             return False
         category = self.current_segment
