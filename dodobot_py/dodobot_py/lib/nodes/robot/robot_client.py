@@ -90,7 +90,7 @@ class Robot(Node):
         self.offset_time_ms = 0
 
         self.prev_drive_command_time = 0.0
-        self.drive_command_timeout = 1.0
+        self.drive_command_timeout = 5.0
 
         self.drive_cmd_forward = 0.0
         self.drive_cmd_rotate = 0.0
@@ -285,7 +285,7 @@ class Robot(Node):
                 self.home_linear()
             elif name == "b" and value == 1:
                 logger.info("Toggling gripper")
-                self.toggle_gripper(300)
+                self.toggle_gripper(750)
             elif name == "x" and value == 1:
                 logger.info("Toggling tilter")
                 self.tilter_toggle()
