@@ -163,6 +163,15 @@ class Robot(Node):
             else:
                 self.cancel_shutdown()
 
+        elif category == "shutdown" and self.parse_segments("s"):
+            name = self.parsed_data[0]
+            if name == "dodobot":
+                logger.info("'Shutdown now' signal received")
+                raise ShutdownException
+            else:
+                logger.warning("Received name doesn't match expected: %s" % name)
+
+
     def start_shutdown(self):
         logger.info("Starting shutdown timer")
         self.shutdown_timer = time.time()
@@ -236,6 +245,10 @@ class Robot(Node):
 
     def set_drive_motors(self, speed_A, speed_B):
         self.write("drive", float(speed_A), float(speed_B))
+
+    def write_date(self):
+        date_str = datetime.datetime.now().strftime("%I:%M:%S%p")
+        self.write("date", date_str)
 
     def check_ready(self):
         self.write("?", "dodobot")
