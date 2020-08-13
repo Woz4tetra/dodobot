@@ -108,6 +108,9 @@ class Robot(Node):
         self.write_date_thread = threading.Thread(target=self.write_date_task, args=self.should_stop_fn)
         self.write_date_delay = 0.5
 
+        self.stepper_max_speed = 300000000
+        self.drive_max_speed = 6800
+
         self.battery_state = BatteryState()
 
     def start(self):
@@ -304,14 +307,14 @@ class Robot(Node):
 
         for name, value in self.joystick.get_axis_events():
             if name == "ry":
-                linear_vel = int(-200000000 * value)
+                linear_vel = int(-self.stepper_max_speed * value)
                 logger.info("Setting linear vel: %s" % linear_vel)
                 self.set_linear_vel(linear_vel)
             elif name == "x":
-                self.drive_cmd_rotate = 6800 * value
+                self.drive_cmd_rotate = self.drive_max_speed * value
                 self.prev_drive_command_time = time.time()
             elif name == "y":
-                self.drive_cmd_forward = -6800 * value
+                self.drive_cmd_forward = -self.drive_max_speed * value
                 self.prev_drive_command_time = time.time()
         for name, value in self.joystick.get_button_events():
             if name == "a" and value == 1:
