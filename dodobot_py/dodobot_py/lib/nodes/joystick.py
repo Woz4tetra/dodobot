@@ -110,6 +110,8 @@ class Joystick(Node):
         self.button_events = []
 
     def start(self):
+        if not joystick_config.enabled:
+            return
         self.open_joystick()
         self.prev_open_attempt_time = time.time()
 
@@ -175,6 +177,8 @@ class Joystick(Node):
         raise StopIteration
 
     def update(self):
+        if not joystick_config.enabled:
+            return
         if not self.is_open():
             if time.time() - self.prev_open_attempt_time > 1.0:
                 self.open_joystick()
