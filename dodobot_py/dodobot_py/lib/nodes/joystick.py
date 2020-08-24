@@ -131,6 +131,12 @@ class Joystick(Node):
             logger.info("%d buttons found: %s" % (self.num_buttons, ", ".join(self.button_map)))
         except FileNotFoundError:
             pass
+        except BaseException as e:
+            logger.error(str(e), exc_info=True)
+
+    def close_joystick(self):
+        self.jsdev.close()
+        self.jsdev = None
 
     def get_device_name(self):
         buf = array.array('B', [0] * 64)
@@ -189,7 +195,11 @@ class Joystick(Node):
         r, w, e = select.select([self.jsdev], [], [], 0)
 
         if self.jsdev in r:
-            evbuf = self.jsdev.read(8)
+            try:
+                evbuf = self.jsdev.read(8)
+            except OSError:
+                self.close_joystick()
+                return
         else:
             return
 
