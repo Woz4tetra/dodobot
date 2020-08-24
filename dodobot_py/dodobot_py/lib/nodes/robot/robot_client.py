@@ -1,3 +1,4 @@
+import math
 import time
 import datetime
 import threading
@@ -93,8 +94,11 @@ class Robot(Node):
         self.offset_time_ms = 0
 
         self.prev_drive_command_time = 0.0
-        self.drive_command_timeout = 5.0
+        self.drive_command_timeout = 2.0
+        self.drive_command_update_delay = 1.0 / 30.0
+        self.prev_sent_command_time = 0.0
 
+        self.joystick_deadzone = 0.1
         self.drive_cmd_forward = 0.0
         self.drive_cmd_rotate = 0.0
         self.prev_cmd_A = 0.0
@@ -110,6 +114,8 @@ class Robot(Node):
 
         self.stepper_max_speed = 300000000
         self.drive_max_speed = 6800
+        self.linear_vel_command = 0
+        self.prev_linear_vel_command = 0
 
         self.battery_state = BatteryState()
 
@@ -306,16 +312,19 @@ class Robot(Node):
             raise self.thread_exception
 
         for name, value in self.joystick.get_axis_events():
+            if abs(value) < self.joystick_deadzone:
+                value = 0.0
+
             if name == "ry":
-                linear_vel = int(-self.stepper_max_speed * value)
-                logger.info("Setting linear vel: %s" % linear_vel)
-                self.set_linear_vel(linear_vel)
+                self.linear_vel_command = int(-self.stepper_max_speed * value)
+                # self.prev_drive_command_time = time.time()
             elif name == "x":
                 self.drive_cmd_rotate = self.drive_max_speed * value
                 self.prev_drive_command_time = time.time()
             elif name == "y":
                 self.drive_cmd_forward = -self.drive_max_speed * value
                 self.prev_drive_command_time = time.time()
+            self.update_drive_command()
         for name, value in self.joystick.get_button_events():
             if name == "a" and value == 1:
                 logger.info("Homing linear")
@@ -326,20 +335,34 @@ class Robot(Node):
             elif name == "x" and value == 1:
                 logger.info("Toggling tilter")
                 self.tilter_toggle()
-        self.update_drive_command()
+
         self.check_shutdown_timer()
 
     def update_drive_command(self):
-        if time.time() - self.prev_drive_command_time > self.drive_command_timeout:
+        current_time = time.time()
+        if current_time - self.prev_sent_command_time < self.drive_command_update_delay:
+            return
+        self.prev_sent_command_time = current_time
+
+        if current_time - self.prev_drive_command_time > self.drive_command_timeout:
             cmd_A = 0.0
             cmd_B = 0.0
         else:
             cmd_A = self.drive_cmd_forward + self.drive_cmd_rotate
             cmd_B = self.drive_cmd_forward - self.drive_cmd_rotate
+        linear_vel = self.linear_vel_command
+
+        if self.prev_linear_vel_command != linear_vel:
+            logger.info("linear_vel: %s" % linear_vel)
+            self.set_linear_vel(linear_vel)
+            self.prev_linear_vel_command = linear_vel
+
         if self.prev_cmd_A != cmd_A or self.prev_cmd_B != cmd_B:
             self.set_drive_motors(cmd_A, cmd_B)
+
             self.prev_cmd_A = cmd_A
             self.prev_cmd_B = cmd_B
+
 
     def stop(self):
         if self.should_stop:
