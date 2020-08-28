@@ -110,6 +110,8 @@ class Joystick(Node):
         self.button_events = []
 
     def start(self):
+        if not joystick_config.enabled:
+            return
         self.open_joystick()
         self.prev_open_attempt_time = time.time()
 
@@ -129,6 +131,12 @@ class Joystick(Node):
             logger.info("%d buttons found: %s" % (self.num_buttons, ", ".join(self.button_map)))
         except FileNotFoundError:
             pass
+        except BaseException as e:
+            logger.error(str(e), exc_info=True)
+
+    def close_joystick(self):
+        self.jsdev.close()
+        self.jsdev = None
 
     def get_device_name(self):
         buf = array.array('B', [0] * 64)
@@ -175,6 +183,8 @@ class Joystick(Node):
         raise StopIteration
 
     def update(self):
+        if not joystick_config.enabled:
+            return
         if not self.is_open():
             if time.time() - self.prev_open_attempt_time > 1.0:
                 self.open_joystick()
@@ -185,7 +195,11 @@ class Joystick(Node):
         r, w, e = select.select([self.jsdev], [], [], 0)
 
         if self.jsdev in r:
-            evbuf = self.jsdev.read(8)
+            try:
+                evbuf = self.jsdev.read(8)
+            except OSError:
+                self.close_joystick()
+                return
         else:
             return
 
