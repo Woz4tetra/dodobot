@@ -32,11 +32,15 @@ class Robot(Node):
         self.thread_exception = None
 
         self.read_update_rate_hz = device_port_config.update_rate_hz
+        self.update_delay = 1.0 / self.read_update_rate_hz
+
         self.prev_packet_time = 0.0
 
         self.write_packet_num = 0
-        self.read_packet_num = 0
+        self.read_packet_num = -1
         self.recv_packet_num = 0
+
+        self.prev_packet_num_report_time = 0.0
 
         self.write_lock = threading.Lock()
         self.read_lock = threading.Lock()
@@ -76,7 +80,7 @@ class Robot(Node):
 
         self.check_ready_timeout = 5.0
         self.write_timeout = 1.0
-        self.packet_start_timeout = 0.05
+        self.packet_start_timeout = 0.15
 
         self.packet_error_codes = {
             0: "no error",
@@ -92,6 +96,8 @@ class Robot(Node):
 
         self.device_start_time = 0.0
         self.offset_time_ms = 0
+
+        self.is_active = False
 
         self.prev_drive_command_time = 0.0
         self.drive_command_timeout = 2.0
@@ -135,8 +141,6 @@ class Robot(Node):
         self.prev_command_time = time.time()
 
         self.set_reporting(True)
-
-        self.set_active(True)
 
         self.write_date_thread.start()
 
@@ -228,6 +232,7 @@ class Robot(Node):
         self.write("[]", 1 if state else 0)
 
     def set_active(self, state):
+        self.is_active = state
         self.write("<>", 1 if state else 0)
 
     def open_gripper(self):
@@ -314,6 +319,7 @@ class Robot(Node):
         for name, value in self.joystick.get_axis_events():
             if abs(value) < self.joystick_deadzone:
                 value = 0.0
+            # logger.info("%s: %.3f" % (name, value))
 
             if name == "ry":
                 self.linear_vel_command = int(-self.stepper_max_speed * value)
@@ -321,10 +327,12 @@ class Robot(Node):
             elif name == "x":
                 self.drive_cmd_rotate = self.drive_max_speed * value
                 self.prev_drive_command_time = time.time()
+                # logger.info("rotate cmd: %s" % self.drive_cmd_rotate)
             elif name == "y":
                 self.drive_cmd_forward = -self.drive_max_speed * value
                 self.prev_drive_command_time = time.time()
-            self.update_drive_command()
+                # logger.info("forward cmd: %s" % self.drive_cmd_forward)
+        self.update_drive_command()
         for name, value in self.joystick.get_button_events():
             if name == "a" and value == 1:
                 logger.info("Homing linear")
@@ -335,14 +343,22 @@ class Robot(Node):
             elif name == "x" and value == 1:
                 logger.info("Toggling tilter")
                 self.tilter_toggle()
+            elif name == "y" and value == 1:
+                self.set_active(not self.is_active)
 
         self.check_shutdown_timer()
 
+        current_time = time.time()
+        if current_time - self.prev_packet_num_report_time > 60.0:
+            logger.info("Packet numbers. Read: %s; Write: %s" % (self.read_packet_num, self.write_packet_num))
+            self.prev_packet_num_report_time = current_time
+
     def update_drive_command(self):
         current_time = time.time()
-        if current_time - self.prev_sent_command_time < self.drive_command_update_delay:
-            return
-        self.prev_sent_command_time = current_time
+        if self.drive_cmd_forward != 0.0 or self.drive_cmd_rotate != 0.0:
+            if current_time - self.prev_sent_command_time < self.drive_command_update_delay:
+                return
+            self.prev_sent_command_time = current_time
 
         if current_time - self.prev_drive_command_time > self.drive_command_timeout:
             cmd_A = 0.0
@@ -358,6 +374,8 @@ class Robot(Node):
             self.prev_linear_vel_command = linear_vel
 
         if self.prev_cmd_A != cmd_A or self.prev_cmd_B != cmd_B:
+            # logger.info("A cmd: %s" % cmd_A)
+            # logger.info("B cmd: %s" % cmd_B)
             self.set_drive_motors(cmd_A, cmd_B)
 
             self.prev_cmd_A = cmd_A
@@ -413,6 +431,7 @@ class Robot(Node):
         c2 = ""
 
         while True:
+            time.sleep(self.update_delay)
             if time.time() - begin_time > self.packet_start_timeout:
                 return False
 
@@ -496,6 +515,8 @@ class Robot(Node):
             self.read_packet_num += 1
             return False
         self.recv_packet_num = int(self.current_segment)
+        if self.read_packet_num == -1:
+            self.read_packet_num = self.recv_packet_num
         if self.recv_packet_num != self.read_packet_num:
             logger.warning("Received packet num doesn't match local count. "
                            "recv %s != local %s", self.recv_packet_num, self.read_packet_num)
@@ -542,12 +563,11 @@ class Robot(Node):
         return self.thread_exception is None
 
     def read_task(self, should_stop):
-        update_delay = 1.0 / self.read_update_rate_hz
         self.prev_packet_time = time.time()
 
         try:
             while True:
-                time.sleep(update_delay)
+                time.sleep(self.update_delay)
                 if should_stop():
                     logger.info("Exiting read thread\n\n")
                     return

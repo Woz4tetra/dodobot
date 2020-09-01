@@ -3,8 +3,10 @@
 import os
 import time
 import array
+import queue
 import struct
 import select
+import threading
 from fcntl import ioctl
 
 
@@ -109,11 +111,27 @@ class Joystick(Node):
         self.axis_events = []
         self.button_events = []
 
+        self.should_stop = False
+        self.should_stop_fn = (lambda: self.should_stop,)
+        self.thread = threading.Thread(target=self.update_task, args=self.should_stop_fn)
+        self.thread.daemon = True
+        self.thread_exception = None
+
+        self.evbuf_queue = queue.Queue()
+
     def start(self):
         if not joystick_config.enabled:
             return
         self.open_joystick()
         self.prev_open_attempt_time = time.time()
+
+        self.thread.start()
+
+    def stop(self):
+        self.should_stop = True
+        logger.info("Set joystick thread stop flag")
+
+        # self.close_joystick()
 
     def is_open(self):
         return self.jsdev is not None
@@ -135,6 +153,7 @@ class Joystick(Node):
             logger.error(str(e), exc_info=True)
 
     def close_joystick(self):
+        logger.info("Closing joystick")
         self.jsdev.close()
         self.jsdev = None
 
@@ -172,19 +191,46 @@ class Joystick(Node):
 
     def get_axis_events(self):
         while len(self.axis_events) > 0:
-            yield self.axis_events.pop()
+            yield self.axis_events.pop(0)
 
         raise StopIteration
 
     def get_button_events(self):
         while len(self.button_events) > 0:
-            yield self.button_events.pop()
+            yield self.button_events.pop(0)
 
         raise StopIteration
 
     def update(self):
         if not joystick_config.enabled:
             return
+        if not self.task_running():
+            logger.error("Error detected in read task. Raising exception")
+            raise self.thread_exception
+
+        # while not self.evbuf_queue.empty():
+        #     evbuf = self.evbuf_queue.get()
+        #     self.parse_joystick_bytes(evbuf)
+
+    def task_running(self):
+        return self.thread_exception is None
+
+    def update_task(self, should_stop):
+        update_delay = 1.0 / 30.0
+        try:
+            while True:
+                # time.sleep(update_delay)
+                if should_stop():
+                    logger.info("Exiting joystick thread\n\n")
+                    return
+
+                self.check_joystick_events()
+
+        except BaseException as e:
+            logger.error("An exception occurred in the joystick thread", exc_info=True)
+            self.thread_exception = e
+
+    def check_joystick_events(self):
         if not self.is_open():
             if time.time() - self.prev_open_attempt_time > 1.0:
                 self.open_joystick()
@@ -192,37 +238,49 @@ class Joystick(Node):
                 if self.jsdev:
                     logger.info("Joystick opened with address {}".format(self.address))
             return
-        r, w, e = select.select([self.jsdev], [], [], 0)
 
-        if self.jsdev in r:
-            try:
-                evbuf = self.jsdev.read(8)
-            except OSError:
-                self.close_joystick()
-                return
-        else:
-            return
+        try:
+            evbuf = self.jsdev.read(8)
+            # self.evbuf_queue.put(evbuf)
+            self.parse_joystick_bytes(evbuf)
+        except OSError:
+            self.close_joystick()
 
-        if evbuf:
-            evtime, value, type, number = struct.unpack('IhBB', evbuf)
+        # r, w, e = select.select([self.jsdev], [], [], 0.0)
+        #
+        # if self.jsdev in r:
+        #     try:
+        #         start_time = time.time()
+        #         while time.time() - start_time < 1.0:
+        #             evbuf = self.jsdev.read(8)
+        #             self.parse_joystick_bytes(evbuf)
+        #     except OSError:
+        #         self.close_joystick()
+        #         return
+        # else:
+        #     return
 
-            # if type & 0x80:
-            #      logger.info("(initial)")
+    def parse_joystick_bytes(self, evbuf):
+        # logger.info("evbuf: %s" % evbuf)
+        evtime, value, type, number = struct.unpack('IhBB', evbuf)
 
-            if type & 0x01:
-                button = self.button_map[number]
-                if button:
-                    self.button_states[button] = value
-                    self.button_events.append((button, value))
-                    # if value:
-                    #     logger.info("%s pressed" % (button))
-                    # else:
-                    #     logger.info("%s released" % (button))
+        # if type & 0x80:
+        #      logger.info("(initial)")
 
-            if type & 0x02:
-                axis = self.axis_map[number]
-                if axis:
-                    fvalue = value / 32767.0
-                    self.axis_states[axis] = fvalue
-                    self.axis_events.append((axis, fvalue))
-                    # logger.info("%s: %.3f" % (axis, fvalue))
+        if type & 0x01:
+            button = self.button_map[number]
+            if button:
+                self.button_states[button] = value
+                self.button_events.append((button, value))
+                # if value:
+                #     logger.info("%s pressed" % (button))
+                # else:
+                #     logger.info("%s released" % (button))
+
+        if type & 0x02:
+            axis = self.axis_map[number]
+            if axis:
+                fvalue = value / 32767.0
+                self.axis_states[axis] = fvalue
+                self.axis_events.append((axis, fvalue))
+                # logger.info("%s: %.3f" % (axis, fvalue))
