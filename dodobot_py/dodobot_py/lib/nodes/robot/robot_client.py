@@ -100,7 +100,7 @@ class Robot(Node):
         self.is_active = False
 
         self.prev_drive_command_time = 0.0
-        self.drive_command_timeout = 2.0
+        self.drive_command_timeout = 30.0
         self.drive_command_update_delay = 1.0 / 30.0
         self.prev_sent_command_time = 0.0
 
@@ -319,7 +319,7 @@ class Robot(Node):
         for name, value in self.joystick.get_axis_events():
             if abs(value) < self.joystick_deadzone:
                 value = 0.0
-            # logger.info("%s: %.3f" % (name, value))
+            logger.info("%s: %.3f" % (name, value))
 
             if name == "ry":
                 self.linear_vel_command = int(-self.stepper_max_speed * value)
@@ -332,20 +332,29 @@ class Robot(Node):
                 self.drive_cmd_forward = -self.drive_max_speed * value
                 self.prev_drive_command_time = time.time()
                 # logger.info("forward cmd: %s" % self.drive_cmd_forward)
-        self.update_drive_command()
-        for name, value in self.joystick.get_button_events():
-            if name == "a" and value == 1:
-                logger.info("Homing linear")
-                self.home_linear()
-            elif name == "b" and value == 1:
-                logger.info("Toggling gripper")
-                self.toggle_gripper(750)
-            elif name == "x" and value == 1:
-                logger.info("Toggling tilter")
-                self.tilter_toggle()
-            elif name == "y" and value == 1:
-                self.set_active(not self.is_active)
+            elif name == "hat0x":
+                self.drive_cmd_rotate = 2000.0 * value
+                self.prev_drive_command_time = time.time()
+            elif name == "hat0y":
+                self.drive_cmd_forward = -2000.0 * value
+                self.prev_drive_command_time = time.time()
 
+        for name, value in self.joystick.get_button_events():
+            logger.info("%s: %.3f" % (name, value))
+            if value == 1:
+                if name == "a":
+                    logger.info("Homing linear")
+                    self.home_linear()
+                elif name == "b":
+                    logger.info("Toggling gripper")
+                    self.toggle_gripper(750)
+                elif name == "x":
+                    logger.info("Toggling tilter")
+                    self.tilter_toggle()
+                elif name == "y":
+                    self.set_active(not self.is_active)
+
+        self.update_drive_command()
         self.check_shutdown_timer()
 
         current_time = time.time()
