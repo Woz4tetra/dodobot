@@ -119,7 +119,8 @@ class Robot(Node):
         self.write_date_delay = 0.5
 
         self.stepper_max_speed = 300000000
-        self.drive_max_speed = 6800
+        self.drive_max_speed = 6800.0
+        self.drive_min_speed = 2500.0
         self.linear_vel_command = 0
         self.prev_linear_vel_command = 0
 
@@ -333,10 +334,10 @@ class Robot(Node):
                 self.prev_drive_command_time = time.time()
                 # logger.info("forward cmd: %s" % self.drive_cmd_forward)
             elif name == "hat0x":
-                self.drive_cmd_rotate = 2000.0 * value
+                self.drive_cmd_rotate = self.drive_min_speed * value
                 self.prev_drive_command_time = time.time()
             elif name == "hat0y":
-                self.drive_cmd_forward = -2000.0 * value
+                self.drive_cmd_forward = -self.drive_min_speed * value
                 self.prev_drive_command_time = time.time()
 
         for name, value in self.joystick.get_button_events():
