@@ -216,7 +216,7 @@ class Joystick(Node):
         return self.thread_exception is None
 
     def update_task(self, should_stop):
-        update_delay = 1.0 / 30.0
+        # update_delay = 1.0 / 30.0
         try:
             while True:
                 # time.sleep(update_delay)
@@ -232,11 +232,12 @@ class Joystick(Node):
 
     def check_joystick_events(self):
         if not self.is_open():
-            if time.time() - self.prev_open_attempt_time > 1.0:
-                self.open_joystick()
-                self.prev_open_attempt_time = time.time()
-                if self.jsdev:
-                    logger.info("Joystick opened with address {}".format(self.address))
+            # if time.time() - self.prev_open_attempt_time > 1.0:
+                # self.prev_open_attempt_time = time.time()
+            self.open_joystick()
+            time.sleep(1.0)
+            if self.jsdev:
+                logger.info("Joystick opened with address {}".format(self.address))
             return
 
         try:
