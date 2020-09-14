@@ -30,6 +30,7 @@ class Robot(Node):
         self.should_stop_fn = (lambda: self.should_stop,)
         self.thread = threading.Thread(target=self.read_task, args=self.should_stop_fn)
         self.thread_exception = None
+        self.serial_device_paused = False
 
         self.read_update_rate_hz = device_port_config.update_rate_hz
         self.update_delay = 1.0 / self.read_update_rate_hz
@@ -124,6 +125,23 @@ class Robot(Node):
         self.linear_vel_command = 0
         self.prev_linear_vel_command = 0
 
+        self.stepper_events = {
+            1: "ACTIVE_TRUE",
+            2: "ACTIVE_FALSE",
+            3: "HOMING_STARTED",
+            4: "HOMING_FINISHED",
+            5: "MOVE_STARTED",
+            6: "MOVE_FINISHED",
+            7: "POSITION_ERROR",
+            8: "NOT_HOMED",
+            9: "NOT_ACTIVE",
+            10: "HOMING_FAILED"
+        }
+
+        self.tilt_position = 0
+        self.sent_tilt_position = 0
+        self.tilt_speed = 0
+
         self.battery_state = BatteryState()
 
     def start(self):
@@ -181,6 +199,25 @@ class Robot(Node):
             self.robot_state["is_active"] = self.parsed_data[1]
             self.robot_state["battery_ok"] = self.parsed_data[2]
             self.robot_state["motors_active"] = self.parsed_data[3]
+
+        elif category == "tilt" and self.parse_segments("ud"):
+            # recv_time = self.parsed_data[0]
+            self.tilt_position = self.parsed_data[1]
+
+        elif category == "le" and self.parse_segments("ud"):
+            recv_time = self.get_device_time(self.parsed_data[0])
+            event_code = self.parsed_data[1]
+            if event_code in self.stepper_events:
+                event_str = self.stepper_events[event_code]
+                logger.info("Received stepper event: %s" % event_str)
+                if event_str == "HOMING_STARTED":
+                    self.pause_serial_device()
+                elif event_str == "HOMING_FINISHED" or event_str == "HOMING_FAILED":
+                    self.resume_serial_device()
+
+            else:
+                logger.warn("Received unknown stepper event code: %s" % event_code)
+
 
         elif category == "latch_btn" and self.parse_segments("ud"):
             button_state = self.parsed_data[1]
@@ -255,6 +292,7 @@ class Robot(Node):
         self.write("tilt", 2)
 
     def set_tilter(self, pos):
+        self.sent_tilt_position = pos
         self.write("tilt", 3, pos)
 
     def set_linear_pos(self, pos):
@@ -320,7 +358,7 @@ class Robot(Node):
         for name, value in self.joystick.get_axis_events():
             if abs(value) < self.joystick_deadzone:
                 value = 0.0
-            logger.info("%s: %.3f" % (name, value))
+            logger.debug("%s: %.3f" % (name, value))
 
             if name == "ry":
                 self.linear_vel_command = int(-self.stepper_max_speed * value)
@@ -354,6 +392,19 @@ class Robot(Node):
                     self.tilter_toggle()
                 elif name == "y":
                     self.set_active(not self.is_active)
+                elif name == "tl":
+                    self.tilt_speed = -1
+                elif name == "tr":
+                    self.tilt_speed = 1
+            else:
+                if name == "tl":
+                    self.tilt_speed = 0
+                elif name == "tr":
+                    self.tilt_speed = 0
+
+        if self.tilt_speed != 0:
+            logger.debug("Sending tilt command: %s" % (self.sent_tilt_position + self.tilt_speed))
+            self.set_tilter(self.sent_tilt_position + self.tilt_speed)
 
         self.update_drive_command()
         self.check_shutdown_timer()
@@ -379,7 +430,7 @@ class Robot(Node):
         linear_vel = self.linear_vel_command
 
         if self.prev_linear_vel_command != linear_vel:
-            logger.info("linear_vel: %s" % linear_vel)
+            logger.debug("linear_vel: %s" % linear_vel)
             self.set_linear_vel(linear_vel)
             self.prev_linear_vel_command = linear_vel
 
@@ -412,6 +463,10 @@ class Robot(Node):
         logger.info("Device connection closed")
 
     def write(self, name, *args):
+        if self.serial_device_paused:
+            logger.debug("Serial device is paused. Skipping write: %s, %s" % (str(name), str(args)))
+            return
+
         packet = b""
         packet += self.PACKET_START_0
         packet += self.PACKET_START_1
@@ -441,7 +496,6 @@ class Robot(Node):
         c2 = ""
 
         while True:
-            time.sleep(self.update_delay)
             if time.time() - begin_time > self.packet_start_timeout:
                 return False
 
@@ -449,11 +503,13 @@ class Robot(Node):
                 continue
 
             c1 = self.device.read(1)
+            # logger.info("buffer: %s" % msg_buffer)
             if c1 == self.PACKET_START_0:
                 c2 = self.device.read(1)
                 if c2 == self.PACKET_START_1:
                     return True
             elif (c1 == self.PACKET_STOP or c2 == self.PACKET_STOP):
+                time.sleep(self.update_delay)
                 logger.info("Device message: %s" % (msg_buffer.decode()))
             else:
                 msg_buffer += c1
@@ -486,6 +542,10 @@ class Robot(Node):
         return buffer
 
     def _read(self):
+        # if self.serial_device_paused:
+        #     logger.debug("Serial device is paused. Skipping read")
+        #     return
+
         if not self.wait_for_packet_start():
             return False
 
@@ -599,3 +659,11 @@ class Robot(Node):
 
     def get_device_time(self, time_ms):
         return self.device_start_time + (time_ms - self.offset_time_ms) / 1000.0
+
+    def pause_serial_device(self):
+        logger.info("Pausing serial device")
+        self.serial_device_paused = True
+
+    def resume_serial_device(self):
+        logger.info("Resuming serial device")
+        self.serial_device_paused = False
