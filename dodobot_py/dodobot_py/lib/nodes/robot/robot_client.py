@@ -1,5 +1,6 @@
 import math
 import time
+import serial
 import datetime
 import threading
 
@@ -105,7 +106,8 @@ class Robot(Node):
         self.drive_command_update_delay = 1.0 / 30.0
         self.prev_sent_command_time = 0.0
 
-        self.joystick_deadzone = 0.1
+        self.joystick_deadzone = 0.17
+        self.max_joy_val = 1.0
         self.drive_cmd_forward = 0.0
         self.drive_cmd_rotate = 0.0
         self.prev_cmd_A = 0.0
@@ -318,12 +320,21 @@ class Robot(Node):
         self.write("date", date_str)
 
     def write_date_task(self, should_stop):
+        failed_write_attempts = 0
         try:
             while True:
                 if should_stop():
                     return
-                self.write_date()
                 time.sleep(self.write_date_delay)
+                if self.serial_device_paused:
+                    continue
+                try:
+                    self.write_date()
+                    failed_write_attempts = 0
+                except serial.SerialTimeoutException:
+                    failed_write_attempts += 1
+                    if failed_write_attempts >= 10:
+                        raise
         except BaseException as e:
             logger.error(str(e), exc_info=True)
 
@@ -358,7 +369,13 @@ class Robot(Node):
         for name, value in self.joystick.get_axis_events():
             if abs(value) < self.joystick_deadzone:
                 value = 0.0
-            logger.debug("%s: %.3f" % (name, value))
+            else:
+                joy_val = abs(value) - self.joystick_deadzone
+                joy_val = math.copysign(joy_val, value)
+                max_joy_val_adj = self.max_joy_val - self.joystick_deadzone
+                command = 1.0 / max_joy_val_adj * joy_val
+
+            # logger.info("%s: %.3f" % (name, value))
 
             if name == "ry":
                 self.linear_vel_command = int(-self.stepper_max_speed * value)
