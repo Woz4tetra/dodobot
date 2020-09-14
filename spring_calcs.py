@@ -17,11 +17,28 @@ import matplotlib.pyplot as plt
 # )
 
 
+# Measured from main motor spring axle
 physical_parameters = dict(
     la=0.05,
     lb=0.01775,
     lc=0.024,
     ld=0.001,
+)
+
+# spring_parameters = dict(
+#     k=1353  # N/m
+# )
+
+# spring_parameters = dict(
+#     m=1.895,  # kg
+#     x1=0.03008,  # m
+#     x0=0.01195,  # m
+# )
+
+spring_parameters = dict(
+    m=2.23,  # kg
+    x1=0.03008,  # m
+    x0=0.01195,  # m
 )
 
 robot_mass = 3.856  # kg
@@ -52,9 +69,18 @@ def get_spring_len(theta, params):
     return l, theta_spring, ((x0, y0), (x1, y1))
 
 
+
+
 def motor_normal_force(l, y1):
-    k = 1353  # N/m
-    x0 = 0.0119
+    x0 = spring_parameters["x0"]
+
+    if "k" in spring_parameters:
+        k = spring_parameters["k"]
+    else:
+        m = spring_parameters["m"]
+        x1 = spring_parameters["x1"]
+        k = m * g / (x1 - x0)
+
     lm = 0.065
 
     return k * (l - x0) * (abs(y1) / lm)
