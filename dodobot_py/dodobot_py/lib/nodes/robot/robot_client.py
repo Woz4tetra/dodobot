@@ -30,7 +30,8 @@ class Robot(Node):
         self.should_stop = False
         self.should_stop_fn = (lambda: self.should_stop,)
         self.thread = threading.Thread(target=self.read_task, args=self.should_stop_fn)
-        self.thread_exception = None
+        self.read_thread_exception = None
+        self.write_date_thread_exception = None
         self.serial_device_paused = False
 
         self.read_update_rate_hz = device_port_config.update_rate_hz
@@ -106,7 +107,7 @@ class Robot(Node):
         self.drive_command_update_delay = 1.0 / 30.0
         self.prev_sent_command_time = 0.0
 
-        self.joystick_deadzone = 0.17
+        self.joystick_deadzone = 0.1
         self.max_joy_val = 1.0
         self.drive_cmd_forward = 0.0
         self.drive_cmd_rotate = 0.0
@@ -194,7 +195,7 @@ class Robot(Node):
             if state_changed:
                 self.battery_state.log_state()
             if self.battery_state.should_shutdown():
-                raise LowBatteryException("Battery is critically low: %{load_voltage_V:0.2f}!! Shutting down.".format(**self.power_state))
+                raise LowBatteryException("Battery is critically low: {load_voltage_V:0.2f}!! Shutting down.".format(**self.power_state))
 
         elif category == "state" and self.parse_segments("uddd"):
             self.robot_state["recv_time"] = self.get_device_time(self.parsed_data[0])
@@ -331,12 +332,17 @@ class Robot(Node):
                 try:
                     self.write_date()
                     failed_write_attempts = 0
-                except serial.SerialTimeoutException:
+                except serial.SerialTimeoutException as e:
                     failed_write_attempts += 1
                     if failed_write_attempts >= 10:
-                        raise
+                        self.write_date_thread_exception = e
+                        return
         except BaseException as e:
             logger.error(str(e), exc_info=True)
+            self.write_date_thread_exception = e
+
+    def is_write_date_task_running(self):
+        return self.write_date_thread_exception is None
 
     def check_ready(self):
         self.write("?", "dodobot")
@@ -362,9 +368,13 @@ class Robot(Node):
             raise DeviceNotReadyException("Failed to receive ready signal within %ss" % self.check_ready_timeout)
 
     def update(self):
-        if not self.read_task_running():
+        if not self.is_read_task_running():
             logger.error("Error detected in read task. Raising exception")
-            raise self.thread_exception
+            raise self.read_thread_exception
+
+        if not self.is_write_date_task_running():
+            logger.error("Error detected in write date task. Raising exception")
+            raise self.write_date_thread_exception
 
         for name, value in self.joystick.get_axis_events():
             if abs(value) < self.joystick_deadzone:
@@ -502,7 +512,11 @@ class Robot(Node):
 
         with self.write_lock:
             logger.debug("Writing %s" % str(packet))
-            self.device.write(packet)
+            try:
+                self.device.write(packet)
+            except BaseException as e:
+                logger.error("Exception while writing packet %s: %s" % (packet, str(e)), exc_info=True)
+
             self.write_packet_num += 1
             time.sleep(0.0005)  # give the microcontroller a chance to not drop the next packet
 
@@ -646,8 +660,8 @@ class Robot(Node):
                 self.parsed_data.append(float(self.current_segment))
         return True
 
-    def read_task_running(self):
-        return self.thread_exception is None
+    def is_read_task_running(self):
+        return self.read_thread_exception is None
 
     def read_task(self, should_stop):
         self.prev_packet_time = time.time()
@@ -664,7 +678,7 @@ class Robot(Node):
 
         except BaseException as e:
             logger.error("An exception occurred in the read thread", exc_info=True)
-            self.thread_exception = e
+            self.read_thread_exception = e
 
     def log_packet_error_code(self, error_code, packet_num):
         logger.warning("Packet %s returned an error:" % packet_num)
