@@ -1,5 +1,6 @@
 import math
 import time
+import pprint
 import serial
 import datetime
 import threading
@@ -12,6 +13,7 @@ from ..node import Node
 from .battery_state import BatteryState
 
 device_port_config = ConfigManager.get_device_port_config()
+robot_config = ConfigManager.get_robot_config()
 logger = LoggerManager.get_logger()
 
 
@@ -81,9 +83,9 @@ class Robot(Node):
         self.parsed_data = []
         self.recv_time = 0.0
 
-        self.check_ready_timeout = 5.0
-        self.write_timeout = 1.0
-        self.packet_start_timeout = 0.15
+        self.check_ready_timeout = robot_config.check_ready_timeout
+        self.write_timeout = robot_config.write_timeout
+        self.packet_start_timeout = robot_config.packet_start_timeout
 
         self.packet_error_codes = {
             0: "no error",
@@ -103,12 +105,12 @@ class Robot(Node):
         self.is_active = False
 
         self.prev_drive_command_time = 0.0
-        self.drive_command_timeout = 30.0
-        self.drive_command_update_delay = 1.0 / 30.0
+        self.drive_command_timeout = robot_config.drive_command_timeout
+        self.drive_command_update_delay = robot_config.drive_command_update_delay
         self.prev_sent_command_time = 0.0
 
-        self.joystick_deadzone = 0.1
-        self.max_joy_val = 1.0
+        self.joystick_deadzone = robot_config.joystick_deadzone
+        self.max_joy_val = robot_config.max_joy_val
         self.drive_cmd_forward = 0.0
         self.drive_cmd_rotate = 0.0
         self.prev_cmd_A = 0.0
@@ -117,16 +119,20 @@ class Robot(Node):
         self.shutdown_timer = 0.0
         self.shutdown_starting = False
         self.prev_display_countdown = None
-        self.shutdown_time_limit = 3.0
+        self.shutdown_time_limit = robot_config.shutdown_time_limit
 
         self.write_date_thread = threading.Thread(target=self.write_date_task, args=self.should_stop_fn)
-        self.write_date_delay = 0.5
+        self.write_date_delay = robot_config.write_date_delay
 
-        self.stepper_max_speed = 31250000 * 8
-        self.drive_max_speed = 6800.0
-        self.drive_min_speed = 2500.0
+        self.stepper_max_speed = robot_config.stepper_max_speed
+        self.drive_max_speed = robot_config.drive_max_speed
+        self.drive_min_speed = robot_config.drive_min_speed
         self.linear_vel_command = 0
         self.prev_linear_vel_command = 0
+
+        self.pid_ks = []
+        self.constant_names = "kp_A ki_A kd_A kp_B ki_B kd_B speed_kA speed_kB".split(" ")
+        self.reload_pid_ks()
 
         self.stepper_events = {
             1: "ACTIVE_TRUE",
@@ -144,6 +150,10 @@ class Robot(Node):
         self.tilt_position = 0
         self.sent_tilt_position = 0
         self.tilt_speed = 0
+
+        self.thumbl_pressed = False
+        self.thumbr_pressed = False
+        self.set_pid_event = True
 
         self.battery_state = BatteryState()
 
@@ -163,6 +173,8 @@ class Robot(Node):
         self.prev_command_time = time.time()
 
         self.set_reporting(True)
+
+        self.set_pid_ks()
 
         self.write_date_thread.start()
 
@@ -316,6 +328,18 @@ class Robot(Node):
     def set_drive_motors(self, speed_A, speed_B):
         self.write("drive", float(speed_A), float(speed_B))
 
+    def set_pid_ks(self):
+        logger.info("Writing PID Ks: %s" % self.pid_ks)
+        self.write("ks", *self.pid_ks)
+
+    def reload_pid_ks(self):
+        robot_config.load()
+        self.pid_ks = []
+        for name in self.constant_names:
+            assert name in robot_config.pid_ks, robot_config.pid_ks
+            self.pid_ks.append(robot_config.pid_ks[name])
+        logger.info("Set PID Ks to:\n%s" % pprint.pformat(robot_config.pid_ks))
+
     def write_date(self):
         date_str = datetime.datetime.now().strftime("%I:%M:%S%p")
         self.write("date", date_str)
@@ -423,11 +447,26 @@ class Robot(Node):
                     self.tilt_speed = -1
                 elif name == "tr":
                     self.tilt_speed = 1
+                elif name == "thumbl":
+                    self.thumbl_pressed = True
+                elif name == "thumbr":
+                    self.thumbr_pressed = True
             else:
                 if name == "tl":
                     self.tilt_speed = 0
                 elif name == "tr":
                     self.tilt_speed = 0
+                elif name == "thumbl":
+                    self.set_pid_event = True
+                    self.thumbl_pressed = False
+                elif name == "thumbr":
+                    self.set_pid_event = True
+                    self.thumbr_pressed = False
+
+        if self.thumbl_pressed and self.thumbr_pressed and self.set_pid_event:
+            self.reload_pid_ks()
+            self.set_pid_ks()
+            self.set_pid_event = False
 
         if self.tilt_speed != 0:
             logger.debug("Sending tilt command: %s" % (self.sent_tilt_position + self.tilt_speed))
@@ -539,9 +578,10 @@ class Robot(Node):
                 c2 = self.device.read(1)
                 if c2 == self.PACKET_START_1:
                     return True
-            elif (c1 == self.PACKET_STOP or c2 == self.PACKET_STOP):
+            elif c1 == self.PACKET_STOP:
                 time.sleep(self.update_delay)
                 logger.info("Device message: %s" % (msg_buffer.decode()))
+                msg_buffer = b""
             else:
                 msg_buffer += c1
 

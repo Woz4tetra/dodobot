@@ -4,6 +4,7 @@ from .general_config import GeneralConfig
 from .joystick_config import JoystickConfig
 from .data_log_config import DataLogConfig
 from .battery_config import BatteryConfig
+from .robot_config import RobotConfig
 
 
 class ConfigManager:
@@ -13,6 +14,7 @@ class ConfigManager:
     joystick_config = None
     data_log_config = None
     battery_config = None
+    robot_config = None
 
     def __init__(self):
         raise Exception("{} is class only".format(self.__class__.__name__))
@@ -53,3 +55,8 @@ class ConfigManager:
             cls.battery_config = BatteryConfig()
         return cls.battery_config
 
+    @classmethod
+    def get_robot_config(cls):
+        if cls.robot_config is None:
+            cls.robot_config = RobotConfig()
+        return cls.robot_config
