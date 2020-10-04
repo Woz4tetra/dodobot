@@ -76,6 +76,15 @@ class Robot(Node):
             "motors_active": False,
         }
 
+        self.gripper_state = {
+            "recv_time"    : 0.0,
+            "pos"          : 0
+        }
+        self.gripper_open_pos = 0
+        self.gripper_closed_pos = 180
+
+        self.brake_pedal_gripper_threshold = 0
+
         self.read_buffer = ""
         self.buffer_index = 0
         self.current_segment = ""
@@ -219,6 +228,10 @@ class Robot(Node):
             # recv_time = self.parsed_data[0]
             self.tilt_position = self.parsed_data[1]
 
+        elif category == "grip" and self.parse_segments("ud"):
+            self.gripper_state["recv_time"] = self.get_device_time(self.parsed_data[0])
+            self.gripper_state["pos"] = self.parsed_data[1]
+
         elif category == "le" and self.parse_segments("ud"):
             recv_time = self.get_device_time(self.parsed_data[0])
             event_code = self.parsed_data[1]
@@ -232,7 +245,6 @@ class Robot(Node):
 
             else:
                 logger.warn("Received unknown stepper event code: %s" % event_code)
-
 
         elif category == "latch_btn" and self.parse_segments("ud"):
             button_state = self.parsed_data[1]
@@ -288,14 +300,23 @@ class Robot(Node):
         self.is_active = state
         self.write("<>", 1 if state else 0)
 
-    def open_gripper(self):
-        self.write("grip", 0)
+    def open_gripper(self, position=None):
+        if position is None:
+            self.write("grip", 0)
+        else:
+            self.write("grip", 0, position)
 
-    def close_gripper(self, force_threshold=-1):
-        self.write("grip", 1, force_threshold)
+    def close_gripper(self, force_threshold=-1, position=None):
+        if position is None:
+            self.write("grip", 1, force_threshold)
+        else:
+            self.write("grip", 1, force_threshold, position)
 
-    def toggle_gripper(self, force_threshold=-1):
-        self.write("grip", 2, force_threshold)
+    def toggle_gripper(self, force_threshold=-1, position=None):
+        if position is None:
+            self.write("grip", 2, force_threshold)
+        else:
+            self.write("grip", 2, force_threshold, position)
 
     def tilter_up(self):
         self.write("tilt", 0)
@@ -428,6 +449,8 @@ class Robot(Node):
             elif name == "hat0y":
                 self.drive_cmd_forward = -self.drive_min_speed * value
                 self.prev_drive_command_time = time.time()
+            elif name == "rz":
+                self.set_brake_pedal_gripper(value)
 
         for name, value in self.joystick.get_button_events():
             logger.info("%s: %.3f" % (name, value))
@@ -438,6 +461,7 @@ class Robot(Node):
                 elif name == "b":
                     logger.info("Toggling gripper")
                     self.toggle_gripper(750)
+                    self.reset_brake_pedal_gripper()
                 elif name == "x":
                     logger.info("Toggling tilter")
                     self.tilter_toggle()
@@ -479,6 +503,21 @@ class Robot(Node):
         if current_time - self.prev_packet_num_report_time > 60.0:
             logger.info("Packet numbers. Read: %s; Write: %s" % (self.read_packet_num, self.write_packet_num))
             self.prev_packet_num_report_time = current_time
+
+    def joy_to_gripper(self, joy_value):
+        return int((self.gripper_closed_pos - self.gripper_open_pos) / 2.0 * (joy_value + 1.0) + self.gripper_open_pos)
+
+    def set_brake_pedal_gripper(self, joy_value):
+        gripper_pos = self.joy_to_gripper(joy_value)
+        logger.info("gripper_pos: %s" % gripper_pos)
+        logger.info("brake_pedal_gripper_threshold: %s" % self.brake_pedal_gripper_threshold)
+
+        if gripper_pos > self.brake_pedal_gripper_threshold:
+            self.close_gripper(100, gripper_pos)
+            self.brake_pedal_gripper_threshold = gripper_pos
+
+    def reset_brake_pedal_gripper(self):
+        self.brake_pedal_gripper_threshold = self.gripper_open_pos
 
     def update_drive_command(self):
         current_time = time.time()
