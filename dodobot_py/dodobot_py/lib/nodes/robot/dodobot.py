@@ -1,7 +1,6 @@
 import math
 import time
 import pprint
-import textwrap
 
 from .robot_client import Robot
 from .task import Task
@@ -71,7 +70,7 @@ class Dodobot(Robot):
         self.joystick = None
 
         self.network_str_task = Task(self.write_network_task)
-        self.network_str_delay = 10.0
+        self.network_str_delay = 5.0 * 60.0
         self.network_info = NetworkInfo(["wlan0"])
 
     def start(self):
@@ -81,6 +80,8 @@ class Dodobot(Robot):
 
         self.set_pid_ks()
         self.set_gripper_config()
+
+        self.network_str_task.start()
 
     def process_packet(self, category):
         super(Dodobot, self).process_packet(category)
@@ -176,24 +177,16 @@ class Dodobot(Robot):
         logger.info("Set PID Ks to:\n%s" % pprint.pformat(robot_config.pid_ks))
 
     def write_network_info(self, kwargs):
-        string = "name: {name:<20}\n" \
-                 "IP: {ip:<20}\n" \
-                 "NM: {nmask:<20}\n" \
-                 "BC: {bcast:<20}\n".format(**kwargs)
-        if len(kwargs["error"]) > 0:
-            string += "error: %s" % ("\n".join(textwrap.wrap(kwargs["error", 24])))
-        else:
-            string += " " * 24
-        logger.info("Writing networking info:\n%s" % string)
-        self.write("network", string)
+        logger.info("Writing networking info:\n%s" % kwargs)
+        self.write("network", kwargs["ip"], kwargs["nmask"], kwargs["bcast"], kwargs["name"], kwargs["error"])
 
     def write_network_task(self, should_stop):
         while True:
-            time.sleep(self.network_str_delay)
             if should_stop():
                 return
             self.network_info.update()
             self.write_network_info(self.network_info.info["wlan0"])
+            time.sleep(self.network_str_delay)
 
     def update(self):
         super(Dodobot, self).update()

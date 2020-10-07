@@ -36,6 +36,6 @@ class NetworkInfo:
                 interface_info["ip"] = match.group(1)
                 interface_info["nmask"] = match.group(2)
                 interface_info["bcast"] = match.group(3)
-                interface_info["error"] = ""
+                interface_info["error"] = " "
             else:
                 interface_info["error"] = "Interface not connected"
