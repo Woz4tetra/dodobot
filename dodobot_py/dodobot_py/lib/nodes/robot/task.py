@@ -14,6 +14,9 @@ class Task:
         self.thread_exception = None
         self.is_finished = False
 
+    def start(self):
+        self.thread.start()
+
     def stop(self):
         self.should_stop = True
 

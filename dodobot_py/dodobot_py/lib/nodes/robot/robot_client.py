@@ -27,6 +27,7 @@ class Robot(Node):
             device_port_config.write_timeout
         )
 
+        self.should_stop = False
         self.serial_device_paused = False
 
         self.read_task = Task(self.read_task_fn)
@@ -114,7 +115,7 @@ class Robot(Node):
         self.device.configure()
         logger.info("Device configured")
 
-        self.thread.start()
+        self.read_task.start()
         logger.info("Read thread started")
         time.sleep(1.0)
 
@@ -123,7 +124,7 @@ class Robot(Node):
 
         self.set_reporting(True)
 
-        self.write_date_thread.start()
+        self.write_date_task.start()
 
     def process_packet(self, category):
         if category == "txrx" and self.parse_segments("dd"):
@@ -281,7 +282,12 @@ class Robot(Node):
         logger.info("Stopping robot client")
 
         self.should_stop = True
-        logger.info("Set read thread stop flag")
+        logger.info("Set stop flag")
+
+        self.read_task.stop()
+        self.write_date_task.stop()
+
+        self.pre_serial_stop_callback()
 
         self.set_reporting(False)
         self.set_active(False)
@@ -291,6 +297,9 @@ class Robot(Node):
         with self.read_lock:
             self.device.stop()
         logger.info("Device connection closed")
+
+    def pre_serial_stop_callback(self):
+        pass
 
     def write(self, name, *args):
         if self.serial_device_paused:

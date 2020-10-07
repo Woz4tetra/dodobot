@@ -322,3 +322,6 @@ class Dodobot(Robot):
 
             self.prev_cmd_A = cmd_A
             self.prev_cmd_B = cmd_B
+
+    def pre_serial_stop_callback(self):
+        self.network_str_task.stop()
