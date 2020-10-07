@@ -184,6 +184,7 @@ class Robot(Node):
         self.set_reporting(True)
 
         self.set_pid_ks()
+        self.set_gripper_config()
 
         self.write_date_thread.start()
 
@@ -352,6 +353,10 @@ class Robot(Node):
     def set_pid_ks(self):
         logger.info("Writing PID Ks: %s" % self.pid_ks)
         self.write("ks", *self.pid_ks)
+
+    def set_gripper_config(self):
+        logger.info("Setting gripper limits open: %s, closed: %s" % (robot_config.gripper_open, robot_config.gripper_closed))
+        self.write("gripcfg", int(robot_config.gripper_open), int(robot_config.gripper_closed))
 
     def reload_pid_ks(self):
         robot_config.load()

@@ -22,6 +22,9 @@ class RobotConfig(Config):
         self.drive_max_speed = 6800.0
         self.drive_min_speed = 2500.0
 
+        self.gripper_open = 0
+        self.gripper_closed = 180
+
         super(RobotConfig, self).__init__("robot.yaml")
 
     def to_dict(self):
@@ -39,4 +42,6 @@ class RobotConfig(Config):
             "stepper_max_speed": self.stepper_max_speed,
             "drive_max_speed": self.drive_max_speed,
             "drive_min_speed": self.drive_min_speed,
+            "gripper_open": self.gripper_open,
+            "gripper_closed": self.gripper_closed,
         }
