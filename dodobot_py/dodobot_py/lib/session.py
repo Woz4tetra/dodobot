@@ -1,11 +1,11 @@
-from lib.nodes.robot import Robot
+from lib.nodes.robot import Dodobot
 from lib.nodes.joystick import Joystick
 from lib.nodes.data_logger import DataLogger
 
 
 class Session:
     def __init__(self):
-        self.robot = Robot(self)
+        self.robot = Dodobot(self)
         self.joystick = Joystick(self)
         self.data_logger = DataLogger(self)
 

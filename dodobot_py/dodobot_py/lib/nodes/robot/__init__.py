@@ -1,1 +1,1 @@
-from .robot_client import Robot
+from .dodobot import Dodobot
