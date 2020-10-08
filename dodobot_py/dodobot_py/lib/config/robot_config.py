@@ -25,6 +25,8 @@ class RobotConfig(Config):
         self.gripper_open = 0
         self.gripper_closed = 180
 
+        self.breakout_level_config = "########\n##oooo##\n#oo##oo#\n########"
+
         super(RobotConfig, self).__init__("robot.yaml")
 
     def to_dict(self):
@@ -44,4 +46,5 @@ class RobotConfig(Config):
             "drive_min_speed": self.drive_min_speed,
             "gripper_open": self.gripper_open,
             "gripper_closed": self.gripper_closed,
+            "breakout_level_config": self.breakout_level_config,
         }

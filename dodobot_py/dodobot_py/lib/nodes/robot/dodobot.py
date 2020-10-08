@@ -70,6 +70,7 @@ class Dodobot(Robot):
         self.joystick = None
 
         self.network_str_task = Task(self.write_network_task)
+        self.network_str_task.thread.daemon = True
         self.network_str_delay = 5.0 * 60.0
         self.network_info = NetworkInfo(["wlan0"])
 
@@ -80,6 +81,7 @@ class Dodobot(Robot):
 
         self.set_pid_ks()
         self.set_gripper_config()
+        self.set_breakout_level()
 
         self.network_str_task.start()
 
@@ -167,6 +169,11 @@ class Dodobot(Robot):
         logger.info(
             "Setting gripper limits open: %s, closed: %s" % (robot_config.gripper_open, robot_config.gripper_closed))
         self.write("gripcfg", int(robot_config.gripper_open), int(robot_config.gripper_closed))
+
+    def set_breakout_level(self):
+        level_config = robot_config.breakout_level_config
+        level_config = level_config.replace("\n", "-")
+        self.write("breakout", level_config)
 
     def reload_pid_ks(self):
         robot_config.load()

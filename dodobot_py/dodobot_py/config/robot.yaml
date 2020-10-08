@@ -37,3 +37,10 @@ drive_min_speed: 2500.0
 
 gripper_open: 50
 gripper_closed: 157
+
+breakout_level_config: |
+    ########
+    oooooooo
+    ########
+    ##oooo##
+    ########
