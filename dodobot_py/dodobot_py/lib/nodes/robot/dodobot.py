@@ -59,6 +59,13 @@ class Dodobot(Robot):
             10: "HOMING_FAILED"
         }
 
+        self.breakout_events = {
+            1 : "BRICK_COLLIDE",
+            2 : "WIN_CONDITION",
+            3 : "BALL_OUT_OF_BOUNDS",
+            4 : "PADDLE_COLLIDE",
+        }
+
         self.tilt_position = 0
         self.sent_tilt_position = 0
         self.tilt_speed = 0
@@ -68,16 +75,20 @@ class Dodobot(Robot):
         self.set_pid_event = True
 
         self.joystick = None
+        self.sounds = None
 
         self.network_str_task = Task(self.write_network_task)
         self.network_str_task.thread.daemon = True
         self.network_str_delay = 5.0 * 60.0
-        self.network_info = NetworkInfo(["wlan0"])
+        self.network_str_delay_no_connection = 1.0
+        self.interface_name = "wlan0"
+        self.network_info = NetworkInfo([self.interface_name])
 
     def start(self):
         super(Dodobot, self).start()
 
         self.joystick = self.session.joystick
+        self.sounds = self.session.sounds
 
         self.set_pid_ks()
         self.set_gripper_config()
@@ -85,11 +96,20 @@ class Dodobot(Robot):
 
         self.network_str_task.start()
 
+        self.sounds["startup"].play()
+
     def process_packet(self, category):
         super(Dodobot, self).process_packet(category)
 
         if category == "ir" and self.parse_segments("udd"):
             logger.info("remote type: %s\t\tvalue: %s" % (self.parsed_data[1], self.parsed_data[2]))
+            ir_code = self.parsed_data[2]
+            if ir_code == 0x00ff:  # VOL-
+                self.sounds.controller.set_volume(self.sounds.controller.volume - 0.05)
+                self.sounds["volume_change"].play()
+            elif ir_code == 0x40bf:  # VOL+
+                self.sounds.controller.set_volume(self.sounds.controller.volume + 0.05)
+                self.sounds["volume_change"].play()
 
         elif category == "tilt" and self.parse_segments("ud"):
             # recv_time = self.parsed_data[0]
@@ -111,6 +131,22 @@ class Dodobot(Robot):
                     self.resume_serial_device()
             else:
                 logger.warn("Received unknown stepper event code: %s" % event_code)
+
+        elif category == "breakout" and self.parse_segments("ud"):
+            event_code = self.parsed_data[1]
+            if event_code in self.breakout_events:
+                event_str = self.breakout_events[event_code]
+                logger.info("Received breakout event: %s" % event_str)
+                if event_str == "BRICK_COLLIDE":
+                    self.sounds["breakout_brick"].play()
+                elif event_str == "WIN_CONDITION":
+                    self.sounds["breakout_win"].play()
+                elif event_str == "BALL_OUT_OF_BOUNDS":
+                    self.sounds["breakout_out_of_bounds"].play()
+                elif event_str == "PADDLE_COLLIDE":
+                    self.sounds["breakout_paddle"].play()
+            else:
+                logger.warn("Received unknown breakout event code: %s" % event_code)
 
     def open_gripper(self, position=None):
         if position is None:
@@ -191,9 +227,14 @@ class Dodobot(Robot):
         while True:
             if should_stop():
                 return
-            self.network_info.update()
-            self.write_network_info(self.network_info.info["wlan0"])
-            time.sleep(self.network_str_delay)
+            updated = self.network_info.update()
+            if self.interface_name in updated:
+                self.write_network_info(self.network_info.info[self.interface_name])
+
+            if self.network_info.info[self.interface_name]["error"] == " ":
+                time.sleep(self.network_str_delay)
+            else:
+                time.sleep(self.network_str_delay_no_connection)
 
     def update(self):
         super(Dodobot, self).update()

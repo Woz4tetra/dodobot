@@ -10,14 +10,18 @@ class NetworkInfo:
             "ip": "XX.XX.XX.XX",
             "nmask": "XX.XX.XX.XX",
             "bcast": "XX.XX.XX.XX",
-            "error": ""
+            "error": "",
+            "cmd_output": ""
         } for k in self.interfaces}
         self.search_regex = r"inet(.*)netmask(.*)broadcast(.*)"
         self.error_regex = r"error fetching interface information:"
 
-    def update(self, ):
+    def update(self):
+        updated = []
         for interface_name in self.interfaces:
-            self.get_info(interface_name)
+            if self.get_info(interface_name):
+                updated.append(interface_name)
+        return updated
 
     def get_info(self, interface_name):
         interface_info = self.info[interface_name]
@@ -25,6 +29,11 @@ class NetworkInfo:
 
         result = subprocess.run(["ifconfig", interface_name], stdout=subprocess.PIPE)
         output = result.stdout.decode()
+
+        if output == interface_info["cmd_output"]:
+            return False
+
+        interface_info["cmd_output"] = output
 
         match = re.search(self.error_regex, output)
         if match:
@@ -39,3 +48,5 @@ class NetworkInfo:
                 interface_info["error"] = " "
             else:
                 interface_info["error"] = "Interface not connected"
+
+        return True
