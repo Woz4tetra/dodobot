@@ -117,21 +117,30 @@ class Joystick(Node):
         self.thread.daemon = True
         self.thread_exception = None
 
+        self.prev_load_time = time.time()
+        self.config_load_interval = 1.0
+        self.prev_enabled_state = joystick_config.enabled
+        self.reload_config()
+
         self.evbuf_queue = queue.Queue()
 
     def start(self):
-        if not joystick_config.enabled:
-            return
-        self.open_joystick()
+        self.thread.start()
         self.prev_open_attempt_time = time.time()
 
-        self.thread.start()
+        if joystick_config.enabled:
+            self.open_joystick()
 
     def stop(self):
         self.should_stop = True
         logger.info("Set joystick thread stop flag")
 
         # self.close_joystick()
+
+    def reload_config(self):
+        if time.time() - self.prev_load_time > self.config_load_interval:
+            joystick_config.load()
+            self.prev_load_time = time.time()
 
     def is_open(self):
         return self.jsdev is not None
@@ -202,11 +211,11 @@ class Joystick(Node):
         raise StopIteration
 
     def update(self):
-        if not joystick_config.enabled:
-            return
         if not self.task_running():
             logger.error("Error detected in read task. Raising exception")
             raise self.thread_exception
+        # if not joystick_config.enabled:
+        #     return
 
         # while not self.evbuf_queue.empty():
         #     evbuf = self.evbuf_queue.get()
@@ -219,12 +228,20 @@ class Joystick(Node):
         # update_delay = 1.0 / 30.0
         try:
             while True:
+                self.reload_config()
+                if joystick_config.enabled != self.prev_enabled_state and not joystick_config.enabled:
+                    self.close_joystick()
+                self.prev_enabled_state = joystick_config.enabled
+
                 # time.sleep(update_delay)
                 if should_stop():
                     logger.info("Exiting joystick thread\n\n")
                     return
 
-                self.check_joystick_events()
+                if joystick_config.enabled:
+                    self.check_joystick_events()
+                else:
+                    time.sleep(1.0)
 
         except BaseException as e:
             logger.error("An exception occurred in the joystick thread", exc_info=True)
