@@ -19,6 +19,7 @@ class RobotConfig(Config):
         self.write_date_delay = 0.5
 
         self.stepper_max_speed = 31250000 * 8
+        self.stepper_max_accel = 1250000 * 8
         self.drive_max_speed = 6800.0
         self.drive_min_speed = 2500.0
 

@@ -37,6 +37,8 @@ class Dodobot(Robot):
         self.prev_cmd_B = 0.0
 
         self.stepper_max_speed = robot_config.stepper_max_speed
+        self.stepper_max_accel = robot_config.stepper_max_accel
+
         self.drive_max_speed = robot_config.drive_max_speed
         self.drive_min_speed = robot_config.drive_min_speed
         self.linear_vel_command = 0
@@ -93,6 +95,8 @@ class Dodobot(Robot):
         self.set_pid_ks()
         self.set_gripper_config()
         self.set_breakout_level()
+        self.set_linear_max_speed(self.stepper_max_speed)
+        self.set_linear_max_accel(self.stepper_max_accel)
 
         self.network_str_task.start()
 
@@ -178,6 +182,12 @@ class Dodobot(Robot):
     def set_tilter(self, pos):
         self.sent_tilt_position = pos
         self.write("tilt", 3, pos)
+
+    def set_linear_max_speed(self, max_speed):
+        self.write("lincfg", 0, max_speed)
+
+    def set_linear_max_accel(self, max_accel):
+        self.write("lincfg", 1, max_accel)
 
     def set_linear_pos(self, pos):
         self.write("linear", 0, pos)
@@ -352,7 +362,6 @@ class Dodobot(Robot):
         linear_vel = self.linear_vel_command
 
         if self.prev_linear_vel_command != linear_vel:
-            logger.debug("linear_vel: %s" % linear_vel)
             self.set_linear_vel(linear_vel)
             self.prev_linear_vel_command = linear_vel
 

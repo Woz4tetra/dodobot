@@ -31,6 +31,7 @@ shutdown_time_limit: 3.0
 write_date_delay: 0.5
 
 stepper_max_speed: 250000000
+stepper_max_accel: 10000000
 
 drive_max_speed: 6800.0
 drive_min_speed: 2500.0
