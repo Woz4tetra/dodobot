@@ -97,5 +97,5 @@ class Pacmd:
         p = Popen(["pacmd"] + command, stdout=PIPE)
         output = p.communicate()[0]
         output = output.decode()
-        logger.info("pacmd output: '%s'" % output)
+        logger.debug("pacmd output: '%s'" % output)
         return output

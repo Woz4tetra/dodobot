@@ -394,7 +394,7 @@ class Robot(Node):
             return False
 
         buffer = self.readline()
-        logger.debug("buffer: %s" % buffer.decode())
+        logger.debug("buffer: %s" % buffer)
 
         if len(buffer) < 5:
             logger.error("Received packet has an invalid number of characters! %s" % repr(buffer.decode()))
@@ -406,7 +406,12 @@ class Robot(Node):
             calc_checksum += val
         calc_checksum &= 255
 
-        self.read_buffer = buffer.decode()
+        try:
+            self.read_buffer = buffer.decode()
+        except UnicodeDecodeError as e:
+            logger.error(e)
+            logger.error("buffer: %s" % buffer)
+            return False
         try:
             recv_checksum = int(self.read_buffer[-2:], 16)
         except ValueError as e:
