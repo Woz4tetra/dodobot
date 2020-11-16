@@ -253,6 +253,25 @@ class Dodobot(Robot):
             logger.error("Error detected in network str task. Raising exception")
             raise self.network_str_task.thread_exception
 
+        self.update_joystick()
+
+    def update_joystick(self):
+        if self.joystick.is_open():
+            self.update_axis_events()
+            self.update_button_events()
+        else:
+            self.linear_vel_command = 0.0
+            self.drive_cmd_rotate = 0.0
+            self.drive_cmd_forward = 0.0
+            self.tilt_speed = 0
+
+        if self.tilt_speed != 0:
+            logger.debug("Sending tilt command: %s" % (self.sent_tilt_position + self.tilt_speed))
+            self.set_tilter(self.sent_tilt_position + self.tilt_speed)
+
+        self.update_drive_command()
+
+    def update_axis_events(self):
         for name, value in self.joystick.get_axis_events():
             if abs(value) < self.joystick_deadzone:
                 value = 0.0
@@ -284,6 +303,7 @@ class Dodobot(Robot):
             elif name == "rz":
                 self.set_brake_pedal_gripper(value)
 
+    def update_button_events(self):
         for name, value in self.joystick.get_button_events():
             logger.info("%s: %.3f" % (name, value))
             if value == 1:
@@ -300,9 +320,9 @@ class Dodobot(Robot):
                 elif name == "y":
                     self.set_active(not self.is_active)
                 elif name == "tl":
-                    self.tilt_speed = -1
+                    self.tilt_speed = -3
                 elif name == "tr":
-                    self.tilt_speed = 1
+                    self.tilt_speed = 3
                 elif name == "thumbl":
                     self.thumbl_pressed = True
                 elif name == "thumbr":
@@ -323,12 +343,6 @@ class Dodobot(Robot):
             self.reload_pid_ks()
             self.set_pid_ks()
             self.set_pid_event = False
-
-        if self.tilt_speed != 0:
-            logger.debug("Sending tilt command: %s" % (self.sent_tilt_position + self.tilt_speed))
-            self.set_tilter(self.sent_tilt_position + self.tilt_speed)
-
-        self.update_drive_command()
 
     def joy_to_gripper(self, joy_value):
         return int((robot_config.gripper_closed - robot_config.gripper_open) / 2.0 * (
