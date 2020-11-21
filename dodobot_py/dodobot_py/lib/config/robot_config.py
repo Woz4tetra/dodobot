@@ -6,7 +6,7 @@ class RobotConfig(Config):
         self.pid_ks = {}
         self.check_ready_timeout = 5.0
         self.write_timeout = 1.0
-        self.packet_start_timeout = 0.15
+        self.packet_read_timeout = 0.15
 
         self.drive_command_timeout = 30.0
         self.drive_command_update_delay = 1.0 / 30.0
@@ -35,7 +35,7 @@ class RobotConfig(Config):
             "pid_ks": self.pid_ks,
             "check_ready_timeout": self.check_ready_timeout,
             "write_timeout": self.write_timeout,
-            "packet_start_timeout": self.packet_start_timeout,
+            "packet_read_timeout": self.packet_read_timeout,
             "drive_command_timeout": self.drive_command_timeout,
             "drive_command_update_delay": self.drive_command_update_delay,
             "joystick_deadzone": self.joystick_deadzone,

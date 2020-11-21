@@ -1,4 +1,5 @@
 import time
+import struct
 import serial
 import datetime
 import threading
@@ -52,7 +53,7 @@ class Robot(Node):
         self.PACKET_START_1 = b'\x34'
         self.PACKET_STOP = b'\n'
         self.PACKET_SEP = b'\t'
-        self.PACKET_SEP_STR = '\t'
+        self.PACKET_SEP_STR = b'\t'
 
         self.ready_state = {
             "name"    : "",
@@ -85,7 +86,7 @@ class Robot(Node):
 
         self.check_ready_timeout = robot_config.check_ready_timeout
         self.write_timeout = robot_config.write_timeout
-        self.packet_start_timeout = robot_config.packet_start_timeout
+        self.packet_read_timeout = robot_config.packet_read_timeout
 
         self.packet_error_codes = {
             0: "no error",
@@ -97,6 +98,7 @@ class Robot(Node):
             6: "packet counts not synchronized",
             7: "failed to find category segment",
             8: "invalid format",
+            9: "packet didn't end with stop character",
         }
 
         self.device_start_time = 0.0
@@ -136,6 +138,10 @@ class Robot(Node):
             else:
                 logger.debug("No error in transmitted packet #%s" % packet_num)
 
+            if error_code == 4:  # mismatched checksum
+                if self.parse_next_segment("s"):
+                    logger.warn("mismatched checksum packet: %s" % self.parsed_data[2])
+
         elif category == "ready" and self.parse_segments("ds"):
             self.ready_state["time_ms"] = self.parsed_data[0]
             self.ready_state["name"] = self.parsed_data[1]
@@ -148,6 +154,7 @@ class Robot(Node):
             self.power_state["current_mA"] = self.parsed_data[1]
             self.power_state["power_mW"] = self.parsed_data[2]
             self.power_state["load_voltage_V"] = self.parsed_data[3]
+            logger.debug("power_state: %s" % str(self.power_state))
             state_changed = self.battery_state.set(self.power_state)
             if state_changed:
                 self.battery_state.log_state()
@@ -301,25 +308,51 @@ class Robot(Node):
     def pre_serial_stop_callback(self):
         pass
 
+    @staticmethod
+    def to_uint16_bytes(integer):
+        return integer.to_bytes(2, 'big')
+
+    @staticmethod
+    def to_int32_bytes(integer):
+        return integer.to_bytes(4, 'big', signed=True)
+
+    @staticmethod
+    def to_float_bytes(floating_point):
+        return struct.pack('f', floating_point)
+
     def write(self, name, *args):
         if self.serial_device_paused:
             logger.debug("Serial device is paused. Skipping write: %s, %s" % (str(name), str(args)))
             return
 
-        packet = b""
-        packet += self.PACKET_START_0
-        packet += self.PACKET_START_1
-        packet += str(self.write_packet_num).encode()
-        packet += self.PACKET_SEP + str(name).encode()
+        # packet = b""
+        # packet += str(self.write_packet_num).encode()
+        # packet += self.PACKET_SEP + str(name).encode()
+
+        packet = self.to_int32_bytes(self.write_packet_num)
+        packet += str(name).encode() + self.PACKET_SEP
         for arg in args:
-            packet += self.PACKET_SEP + str(arg).encode()
+            if type(arg) == int:
+                packet += self.to_int32_bytes(arg)
+            elif type(arg) == float:
+                packet += self.to_float_bytes(arg)
+            else:
+                arg = str(arg)
+                assert len(arg) < 0x10000, arg
+                len_bytes = self.to_uint16_bytes(len(arg))
+                packet += len_bytes + arg.encode()
 
         calc_checksum = 0
-        for val in packet[2:]:
+        for val in packet:
             calc_checksum += val
         calc_checksum &= 0xff
 
         packet += b"%02x" % calc_checksum
+
+        packet_len = len(packet)
+        packet_len_bytes = self.to_uint16_bytes(packet_len)
+
+        packet = self.PACKET_START_0 + self.PACKET_START_1 + packet_len_bytes + packet
         packet += self.PACKET_STOP
 
         with self.write_lock:
@@ -339,7 +372,7 @@ class Robot(Node):
         c2 = ""
 
         while True:
-            if time.time() - begin_time > self.packet_start_timeout:
+            if time.time() - begin_time > self.packet_read_timeout:
                 return False
 
             if self.device.in_waiting() < 2:
@@ -353,36 +386,64 @@ class Robot(Node):
                     return True
             elif c1 == self.PACKET_STOP:
                 time.sleep(self.update_delay)
-                logger.info("Device message: %s" % (msg_buffer.decode()))
+                logger.info("Device message: %s" % (msg_buffer))
                 msg_buffer = b""
             else:
                 msg_buffer += c1
 
-    def get_next_segment(self):
+    def get_next_segment(self, length=None, tab_separated=False):
         if self.buffer_index >= len(self.read_buffer):
             return False
-
-        sep_index = self.read_buffer.find(self.PACKET_SEP_STR, self.buffer_index)
-        if sep_index == -1:
-            self.current_segment = self.read_buffer[self.buffer_index:]
-            self.buffer_index = len(self.read_buffer)
+        if tab_separated:
+            sep_index = self.read_buffer.find(self.PACKET_SEP_STR, self.buffer_index)
+            if sep_index == -1:
+                self.current_segment = self.read_buffer[self.buffer_index:]
+                self.buffer_index = len(self.read_buffer)
+            else:
+                self.current_segment = self.read_buffer[self.buffer_index: sep_index]
+                self.buffer_index = sep_index + 1
+            return True
         else:
-            self.current_segment = self.read_buffer[self.buffer_index: sep_index]
-            self.buffer_index = sep_index + 1
-        return True
+            if length is None:
+                # assume first 2 bytes contain the length
+                len_bytes = self.read_buffer[self.buffer_index: self.buffer_index + 2]
+                length = int.from_bytes(len_bytes, 'big')
+                self.buffer_index += 2
+                if length >= len(self.read_buffer):
+                    logger.error("Parsed length %s exceeds buffer length! %s" % (length, self.read_buffer))
+            self.current_segment = self.read_buffer[self.buffer_index: self.buffer_index + length]
+            self.buffer_index += length
+            return True
 
     def read(self):
         with self.read_lock:
             return self._read()
 
     def readline(self):
+        begin_time = time.time()
         buffer = b""
+        len_bytes = b''
+        packet_len = 0
+        counter = 0
         while True:
-            if self.device.in_waiting():
-                c = self.device.read(1)
-                if c == self.PACKET_STOP:
-                    break
-                buffer += c
+            if time.time() - begin_time > self.packet_read_timeout:
+                break
+            if not self.device.in_waiting():
+                continue
+            c = self.device.read(1)
+            if len(len_bytes) < 2:
+                len_bytes += c
+                if len(len_bytes) == 2:
+                    packet_len = int.from_bytes(len_bytes, "big")
+                continue
+
+            counter += 1
+            if counter > packet_len:
+                if c != self.PACKET_STOP:
+                    logger.error("Packet didn't end with stop character: %s. buffer: %s" % (c, buffer))
+                    return None
+                break
+            buffer += c
         return buffer
 
     def _read(self):
@@ -394,6 +455,10 @@ class Robot(Node):
             return False
 
         buffer = self.readline()
+        if buffer is None:
+            logger.error("Error encountered while reading packet. Skipping packet")
+            return False
+
         logger.debug("buffer: %s" % buffer)
 
         if len(buffer) < 5:
@@ -406,34 +471,35 @@ class Robot(Node):
             calc_checksum += val
         calc_checksum &= 255
 
-        try:
-            self.read_buffer = buffer.decode()
-        except UnicodeDecodeError as e:
-            logger.error(e)
-            logger.error("buffer: %s" % buffer)
-            return False
+        self.read_buffer = buffer
+        # try:
+        #     self.read_buffer = buffer.decode()
+        # except UnicodeDecodeError as e:
+        #     logger.error(e)
+        #     logger.error("buffer: %s" % buffer)
+        #     return False
         try:
             recv_checksum = int(self.read_buffer[-2:], 16)
         except ValueError as e:
             logger.error("Failed to parsed checksum as hex int: %s" % repr(self.read_buffer))
             self.read_packet_num += 1
             return False
-        self.read_buffer = self.read_buffer[:-2]
         if calc_checksum != recv_checksum:
             logger.error(
-                "Checksum failed! recv %s != calc %s. %s" % (recv_checksum, calc_checksum, repr(self.read_buffer)))
+                "Checksum failed! recv %02x != calc %02x. %s" % (recv_checksum, calc_checksum, repr(self.read_buffer)))
             self.read_packet_num += 1
             return False
+        self.read_buffer = self.read_buffer[:-2]
 
         self.buffer_index = 0
 
         # get packet num segment
-        if not self.get_next_segment():
+        if not self.get_next_segment(4):
             logger.error(
                 "Failed to find packet number segment %s! %s" % (repr(self.current_segment), repr(self.read_buffer)))
             self.read_packet_num += 1
             return False
-        self.recv_packet_num = int(self.current_segment)
+        self.recv_packet_num = int.from_bytes(self.current_segment, 'big')
         if self.read_packet_num == -1:
             self.read_packet_num = self.recv_packet_num
         if self.recv_packet_num != self.read_packet_num:
@@ -443,12 +509,18 @@ class Robot(Node):
             self.read_packet_num = self.recv_packet_num
 
         # find category segment
-        if not self.get_next_segment():
+        if not self.get_next_segment(tab_separated=True):
             logger.error(
                 "Failed to find category segment %s! %s" % (repr(self.current_segment), repr(self.read_buffer)))
             self.read_packet_num += 1
             return False
-        category = self.current_segment
+        try:
+            category = self.current_segment.decode()
+        except UnicodeDecodeError:
+            logger.error("Category segment contains invalid characters: %s, %s" % (repr(self.current_segment), repr(self.read_buffer)))
+            self.read_packet_num += 1
+            return False
+        logger.debug("category: %s" % category)
 
         try:
             self.process_packet(category)
@@ -457,25 +529,41 @@ class Robot(Node):
         except LowBatteryException:
             raise
         except BaseException as e:
-            logger.error("Exception while processing packet %s: %s" % (self.read_buffer, str(e)), exc_info=True)
+            logger.error("Exception while processing packet %s" % (str(e)), exc_info=True)
+            logger.error("Error packet: %s" % self.read_buffer)
             return False
 
         self.read_packet_num += 1
+        return True
+
+    def parse_next_segment(self, f):
+        if f == 'd' or f == 'u' or f == 'f':
+            length = 4
+        # elif f == 'f':
+        #     length = 8
+        else:
+            length = None
+
+        if not self.get_next_segment(length):
+            return False
+
+        if f == 'd' or f == 'u':
+            self.parsed_data.append(int.from_bytes(self.current_segment, 'big'))
+        elif f == 's':
+            self.parsed_data.append(self.current_segment)
+        elif f == 'f':
+            parsed_float = struct.unpack('f', self.current_segment)
+            self.parsed_data.append(parsed_float[0])
+
         return True
 
     def parse_segments(self, formats):
         self.parsed_data = []
         self.recv_time = time.time()
         for index, f in enumerate(formats):
-            if not self.get_next_segment():
+            if not self.parse_next_segment(f):
                 logger.error("Failed to parse segment #%s. Buffer: %s" % (index, self.read_buffer))
                 return False
-            if f == 'd' or f == 'u':
-                self.parsed_data.append(int(self.current_segment))
-            elif f == 's':
-                self.parsed_data.append(self.current_segment)
-            elif f == 'f':
-                self.parsed_data.append(float(self.current_segment))
         return True
 
     def read_task_fn(self, should_stop):
