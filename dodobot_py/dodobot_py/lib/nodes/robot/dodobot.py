@@ -5,6 +5,7 @@ import pprint
 from .robot_client import Robot
 from .task import Task
 from .network_info import NetworkInfo
+from . import image
 from lib.config import ConfigManager
 from lib.logger_manager import LoggerManager
 
@@ -101,6 +102,16 @@ class Dodobot(Robot):
         self.network_str_task.start()
 
         self.sounds["startup"].play()
+
+        time.sleep(0.35)
+        try:
+            self.write_image(
+                robot_config.startup_image_path,
+                robot_config.startup_image_size,
+                robot_config.startup_image_quality,
+            )
+        except BaseException as e:
+            logger.error(str(e), exc_info=True)
 
     def process_packet(self, category):
         super(Dodobot, self).process_packet(category)
@@ -389,3 +400,17 @@ class Dodobot(Robot):
 
     def pre_serial_stop_callback(self):
         self.network_str_task.stop()
+
+    def write_image(self, path, size, quality=15):
+        img_bytes = image.bytes_from_file(path, size, quality)
+        if len(img_bytes) == 0:
+            logger.warn("Image is empty!")
+            return
+
+        len_img_bytes = len(img_bytes)
+        if len_img_bytes > 0x4000:
+            logger.warn("Image is too large: %s!" % len_img_bytes)
+            return
+
+        logger.info("Writing image: %s" % len_img_bytes)
+        self.write("img", img_bytes)

@@ -336,11 +336,14 @@ class Robot(Node):
                 packet += self.to_int32_bytes(arg)
             elif type(arg) == float:
                 packet += self.to_float_bytes(arg)
-            else:
-                arg = str(arg)
+            elif type(arg) == str or type(arg) == bytes:
                 assert len(arg) < 0x10000, arg
                 len_bytes = self.to_uint16_bytes(len(arg))
-                packet += len_bytes + arg.encode()
+                if type(arg) == str:
+                    arg = arg.encode()
+                packet += len_bytes + arg
+            else:
+                logger.warn("Invalid argument type: %s, %s" % (type(arg), arg))
 
         calc_checksum = 0
         for val in packet:

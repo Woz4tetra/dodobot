@@ -1,3 +1,4 @@
+import os
 from .config import Config
 
 
@@ -28,7 +29,15 @@ class RobotConfig(Config):
 
         self.breakout_level_config = "########\n##oooo##\n#oo##oo#\n########"
 
+        self.startup_image_path = ""
+        self.startup_image_size = (160, 108)
+        self.startup_image_quality = 15
+
         super(RobotConfig, self).__init__("robot.yaml")
+
+    def load(self):
+        super(RobotConfig, self).load()
+        self.startup_image_path = os.path.join(self.config_dir, self.startup_image_path)
 
     def to_dict(self):
         return {
@@ -48,4 +57,7 @@ class RobotConfig(Config):
             "gripper_open": self.gripper_open,
             "gripper_closed": self.gripper_closed,
             "breakout_level_config": self.breakout_level_config,
+            "startup_image_path": self.startup_image_path,
+            "startup_image_size": self.startup_image_size,
+            "startup_image_quality": self.startup_image_quality,
         }
