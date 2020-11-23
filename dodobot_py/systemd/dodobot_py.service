@@ -7,5 +7,8 @@ WantedBy=default.target
 
 [Service]
 ExecStart=/home/ben/.local/dodobot/dodobot_py/bin/dodobot_py
-Restart=always
+Restart=no
 KillSignal=SIGINT
+TimeoutStopSec=3
+FinalKillSignal=SIGKILL
+

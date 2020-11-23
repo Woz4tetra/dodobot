@@ -34,13 +34,14 @@ class BatteryState:
         if self.voltage_V >= battery_config.full_voltage:
             state = self.FULL
             self.prev_critical_time = None
-        elif self.voltage_V >= battery_config.ok_voltage:
+        # elif self.voltage_V >= battery_config.ok_voltage:
+        elif self.voltage_V > battery_config.low_voltage:
             state = self.OK
             self.prev_critical_time = None
-        elif self.voltage_V >= battery_config.low_voltage:
+        elif self.voltage_V <= battery_config.low_voltage:
             state = self.LOW
             self.prev_critical_time = None
-        elif self.voltage_V >= battery_config.critical_voltage:
+        elif self.voltage_V <= battery_config.critical_voltage:
             state = self.CRITICAL
             if self.prev_critical_time is None:
                 self.prev_critical_time = time.time()
@@ -67,7 +68,7 @@ class BatteryState:
         elif self.state == self.OK:
             logger.info("Battery ok: %0.2f" % self.voltage_V)
         elif self.state == self.LOW:
-            logger.warn("Battery is low: %0.2f. Shutting down soon." % self.voltage_V)
+            logger.warn("Battery is low: %0.2f" % self.voltage_V)
         elif self.state == self.CRITICAL:
             logger.error("Battery is critically low: %0.2f!!" % self.voltage_V)
         else:

@@ -26,9 +26,13 @@ class Dodobot(Robot):
         self.brake_pedal_gripper_threshold = 0
 
         self.prev_drive_command_time = 0.0
-        self.drive_command_timeout = robot_config.drive_command_timeout
-        self.drive_command_update_delay = robot_config.drive_command_update_delay
+        self.prev_drive_repeat_command_time = 0.0
+        self.prev_drive_repeat_stop_time = 0.0
         self.prev_sent_command_time = 0.0
+        self.drive_command_timeout = robot_config.drive_command_timeout
+        self.drive_command_repeat_timeout = robot_config.drive_command_repeat_timeout
+        self.drive_stop_repeat_timeout = self.drive_command_repeat_timeout + 0.5
+        self.drive_command_update_delay = 1.0 / robot_config.drive_command_update_rate
 
         self.joystick_deadzone = robot_config.joystick_deadzone
         self.max_joy_val = robot_config.max_joy_val
@@ -241,7 +245,7 @@ class Dodobot(Robot):
         logger.info("Set PID Ks to:\n%s" % pprint.pformat(robot_config.pid_ks))
 
     def write_network_info(self, kwargs):
-        logger.info("Writing networking info:\n%s" % kwargs)
+        logger.debug("Writing networking info:\n%s" % kwargs)
         self.write("network", kwargs["ip"], kwargs["nmask"], kwargs["bcast"], kwargs["name"], kwargs["error"])
 
     def write_network_task(self, should_stop):
@@ -281,6 +285,7 @@ class Dodobot(Robot):
             self.set_tilter(self.sent_tilt_position + self.tilt_speed)
 
         self.update_drive_command()
+        self.update_linear_command()
 
     def update_axis_events(self):
         for name, value in self.joystick.get_axis_events():
@@ -371,6 +376,12 @@ class Dodobot(Robot):
     def reset_brake_pedal_gripper(self):
         self.brake_pedal_gripper_threshold = robot_config.gripper_open
 
+    def update_linear_command(self):
+        linear_vel = self.linear_vel_command
+        if self.prev_linear_vel_command != linear_vel:
+            self.set_linear_vel(linear_vel)
+            self.prev_linear_vel_command = linear_vel
+
     def update_drive_command(self):
         current_time = time.time()
         if self.drive_cmd_forward != 0.0 or self.drive_cmd_rotate != 0.0:
@@ -384,19 +395,22 @@ class Dodobot(Robot):
         else:
             cmd_A = self.drive_cmd_forward + self.drive_cmd_rotate
             cmd_B = self.drive_cmd_forward - self.drive_cmd_rotate
-        linear_vel = self.linear_vel_command
 
-        if self.prev_linear_vel_command != linear_vel:
-            self.set_linear_vel(linear_vel)
-            self.prev_linear_vel_command = linear_vel
+        if (self.prev_cmd_A != cmd_A or self.prev_cmd_B != cmd_B or
+                current_time - self.prev_drive_repeat_command_time > self.drive_command_repeat_timeout):
+            self.prev_drive_repeat_command_time = current_time
 
-        if self.prev_cmd_A != cmd_A or self.prev_cmd_B != cmd_B:
-            # logger.info("A cmd: %s" % cmd_A)
-            # logger.info("B cmd: %s" % cmd_B)
-            self.set_drive_motors(cmd_A, cmd_B)
+            if (cmd_A == 0.0 and cmd_B == 0.0):
+                if current_time - self.prev_drive_repeat_stop_time > self.drive_stop_repeat_timeout:
+                    return
+            else:
+                self.prev_drive_repeat_stop_time = current_time
 
             self.prev_cmd_A = cmd_A
             self.prev_cmd_B = cmd_B
+
+            self.set_drive_motors(cmd_A, cmd_B)
+            logger.info("A: %s, B: %s" % (cmd_A, cmd_B))
 
     def pre_serial_stop_callback(self):
         self.network_str_task.stop()

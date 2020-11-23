@@ -263,6 +263,9 @@ class Joystick(Node):
             self.parse_joystick_bytes(evbuf)
         except OSError:
             self.close_joystick()
+        except BaseException as e:
+            logger.error(str(e), exc_info=True)
+            self.close_joystick()
 
         # r, w, e = select.select([self.jsdev], [], [], 0.0)
         #

@@ -10,7 +10,8 @@ class RobotConfig(Config):
         self.packet_read_timeout = 0.15
 
         self.drive_command_timeout = 30.0
-        self.drive_command_update_delay = 1.0 / 30.0
+        self.drive_command_repeat_timeout = 0.75
+        self.drive_command_update_rate = 30.0
 
         self.joystick_deadzone = 0.1
         self.max_joy_val = 1.0
