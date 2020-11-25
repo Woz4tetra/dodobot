@@ -13,7 +13,11 @@ class Sounds(Node):
     def __init__(self, session):
         super(Sounds, self).__init__(session)
 
-        self.controller = Pacmd(sound_config.audio_sink)
+        self.controller = Pacmd(
+            sound_config.audio_sink,
+            sound_config.volume_raw_min,
+            sound_config.volume_raw_max,
+        )
 
         self.sounds = {}
         self.load_audio(sound_config.sounds)
@@ -30,13 +34,20 @@ class Sounds(Node):
 
     def load_audio(self, config: dict):
         for name, value in config.items():
-            if value.startswith(":generate:"):
+            if len(value) == 0:
+                logger.info("Skipping '%s' audio file" % str(name))
+                self.sounds[name] = Audio()
+            elif value.startswith(":generate:"):
                 logger.info("Loading '%s' as generated sound: %s" % (name, value))
                 audio = self.generate_sound(value)
                 self.sounds[name] = Audio.load(audio)
             else:
-                logger.info("Loading '%s' as audio file: %s" % (name, value))
-                self.sounds[name] = Audio.load_from_path(value)
+                try:
+                    logger.info("Loading '%s' as audio file: %s" % (name, value))
+                    self.sounds[name] = Audio.load_from_path(value)
+                except BaseException as e:
+                    logger.error(str(e), exc_info=True)
+
 
     def generate_sound(self, generate_params):
         class_name = generate_params.pop("class_name")

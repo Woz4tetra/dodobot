@@ -12,10 +12,10 @@ class Session:
         self.sounds = Sounds(self)
 
     def start(self):
+        self.sounds.start()
         self.robot.start()
         self.joystick.start()
         self.data_logger.start()
-        self.sounds.start()
 
     def update(self):
         self.robot.update()

@@ -167,6 +167,12 @@ class Dodobot(Robot):
             else:
                 logger.warn("Received unknown breakout event code: %s" % event_code)
 
+        elif category == "bump" and self.parse_segments("udd"):
+            bump1_state = self.parsed_data[1]
+            bump2_state = self.parsed_data[2]
+            if bump1_state or bump2_state:
+                self.sounds["bumper_sound"].play()
+
     def open_gripper(self, position=None):
         if position is None:
             self.write("grip", 0)

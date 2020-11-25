@@ -42,7 +42,8 @@ class Audio:
 
     def play(self):
         self.stop()
-        self.playback = _play_with_simpleaudio(self.audio)
+        if self.audio is not None:
+            self.playback = _play_with_simpleaudio(self.audio)
 
     def is_playing(self):
         return self.playback is not None and self.playback.is_playing()
@@ -56,10 +57,11 @@ class Audio:
             self.playback.stop()
 
 class Pacmd:
-    def __init__(self, sink: str):
+    def __init__(self, sink: str, volume_raw_min: int, volume_raw_max: int):
         self.sink = str(sink)
-        self.max_volume = 0x10000
-        self.volume = self.max_volume
+        self.volume_raw_min = volume_raw_min
+        self.volume_raw_max = volume_raw_max
+        self.volume = self.volume_raw_min
         self.sink_timeout_s = 30.0
 
         self.wait_for_sinks()
@@ -68,12 +70,13 @@ class Pacmd:
     def list_sinks(self):
         return self._run_cmd(["list-sinks"])
 
-    def set_volume(self, percent):
-        # percent is 0...1
-        self.volume = max(min(percent, 1.0), 0.0)
-        logger.info("Setting volume to %0.3f" % self.volume)
-        volume = str(int(self.max_volume * percent))
-        self._run_cmd(["set-sink-volume", self.sink, volume])
+    def set_volume(self, ratio):
+        # ratio is 0...1
+        self.volume = (self.volume_raw_max - self.volume_raw_min) * ratio + self.volume_raw_min
+        self.volume = max(min(self.volume, self.volume_raw_max), self.volume_raw_min)
+        self.volume = int(self.volume)
+        logger.info("Setting volume to %s (%s%%)" % (self.volume, ratio * 100.0))
+        self._run_cmd(["set-sink-volume", self.sink, str(self.volume)])
 
     def wait_for_sinks(self):
         start_time = time.time()

@@ -5,6 +5,8 @@ class SoundsConfig(Config):
     def __init__(self):
         self.audio_sink = "0"
         self.volume = 0.5
+        self.volume_raw_max = 0x10000
+        self.volume_raw_min = 0
         self.sounds = {}
         super(SoundsConfig, self).__init__("sounds.yaml")
 
