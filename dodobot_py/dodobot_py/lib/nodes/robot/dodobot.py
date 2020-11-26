@@ -76,6 +76,8 @@ class Dodobot(Robot):
         self.tilt_position = 0
         self.sent_tilt_position = 0
         self.tilt_speed = 0
+        self.max_tilt_speed = robot_config.max_tilt_speed
+        self.enable_tilt_axis = False
 
         self.thumbl_pressed = False
         self.thumbr_pressed = False
@@ -170,6 +172,7 @@ class Dodobot(Robot):
         elif category == "bump" and self.parse_segments("udd"):
             bump1_state = self.parsed_data[1]
             bump2_state = self.parsed_data[2]
+            logger.info("bump 1: %s, 2: %s" % (bump1_state, bump2_state))
             if bump1_state or bump2_state:
                 self.sounds["bumper_sound"].play()
 
@@ -287,8 +290,8 @@ class Dodobot(Robot):
             self.tilt_speed = 0
 
         if self.tilt_speed != 0:
-            logger.debug("Sending tilt command: %s" % (self.sent_tilt_position + self.tilt_speed))
-            self.set_tilter(self.sent_tilt_position + self.tilt_speed)
+            self.set_tilter(self.tilt_position + self.tilt_speed)
+            logger.info("Sending tilt command: %s" % (self.sent_tilt_position))
 
         self.update_drive_command()
         self.update_linear_command()
@@ -306,7 +309,10 @@ class Dodobot(Robot):
             # logger.info("%s: %.3f" % (name, value))
 
             if name == "ry":
-                self.linear_vel_command = int(-self.stepper_max_speed * value)
+                if self.enable_tilt_axis:
+                    self.tilt_speed = int(-self.max_tilt_speed * value)
+                else:
+                    self.linear_vel_command = int(-self.stepper_max_speed * value)
                 # self.prev_drive_command_time = time.time()
             elif name == "x":
                 self.drive_cmd_rotate = self.drive_max_speed * value
@@ -342,18 +348,16 @@ class Dodobot(Robot):
                 elif name == "y":
                     self.set_active(not self.is_active)
                 elif name == "tl":
-                    self.tilt_speed = -3
-                elif name == "tr":
-                    self.tilt_speed = 3
+                    self.enable_tilt_axis = True
+                # elif name == "tr":
                 elif name == "thumbl":
                     self.thumbl_pressed = True
                 elif name == "thumbr":
                     self.thumbr_pressed = True
             else:
                 if name == "tl":
-                    self.tilt_speed = 0
-                elif name == "tr":
-                    self.tilt_speed = 0
+                    self.enable_tilt_axis = False
+                # elif name == "tr":
                 elif name == "thumbl":
                     self.set_pid_event = True
                     self.thumbl_pressed = False

@@ -1,4 +1,5 @@
 import re
+import os
 import time
 from subprocess import Popen, PIPE
 
@@ -25,6 +26,7 @@ class Audio:
 
     @classmethod
     def load_from_path(cls, path):
+        path = os.path.expanduser(path)
         return cls.load(AudioSegment.from_file(path))
 
     @classmethod
@@ -61,7 +63,8 @@ class Pacmd:
         self.sink = str(sink)
         self.volume_raw_min = volume_raw_min
         self.volume_raw_max = volume_raw_max
-        self.volume = self.volume_raw_min
+        self.volume = 0.0
+        self.raw_volume = self.volume_raw_min
         self.sink_timeout_s = 30.0
 
         self.wait_for_sinks()
@@ -72,11 +75,11 @@ class Pacmd:
 
     def set_volume(self, ratio):
         # ratio is 0...1
-        self.volume = (self.volume_raw_max - self.volume_raw_min) * ratio + self.volume_raw_min
-        self.volume = max(min(self.volume, self.volume_raw_max), self.volume_raw_min)
-        self.volume = int(self.volume)
-        logger.info("Setting volume to %s (%s%%)" % (self.volume, ratio * 100.0))
-        self._run_cmd(["set-sink-volume", self.sink, str(self.volume)])
+        self.volume = max(min(ratio, 1.0), 0.0)
+        self.raw_volume = (self.volume_raw_max - self.volume_raw_min) * self.volume + self.volume_raw_min
+        self.raw_volume = int(self.raw_volume)
+        logger.info("Setting volume to %s (%0.2f%%)" % (self.raw_volume, self.volume * 100.0))
+        self._run_cmd(["set-sink-volume", self.sink, str(self.raw_volume)])
 
     def wait_for_sinks(self):
         start_time = time.time()

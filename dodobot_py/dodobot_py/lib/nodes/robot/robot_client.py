@@ -535,8 +535,8 @@ class Robot(Node):
             logger.error("Exception while processing packet %s" % (str(e)), exc_info=True)
             logger.error("Error packet: %s" % self.read_buffer)
             return False
-
-        self.read_packet_num += 1
+        finally:
+            self.read_packet_num += 1
         return True
 
     def parse_next_segment(self, f):
