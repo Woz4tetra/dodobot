@@ -77,6 +77,11 @@ class Dodobot(Robot):
         self.sent_tilt_position = 0
         self.tilt_speed = 0
         self.max_tilt_speed = robot_config.max_tilt_speed
+
+        self.grab_speed = 0
+        self.grab_joy_val_threshold = 0.25
+        self.max_grab_speed = robot_config.max_grab_speed
+
         self.enable_tilt_axis = False
 
         self.thumbl_pressed = False
@@ -177,22 +182,34 @@ class Dodobot(Robot):
                 self.sounds["bumper_sound"].play()
 
     def open_gripper(self, position=None):
+        logger.debug("Sending gripper open command: %s" % str(position))
         if position is None:
             self.write("grip", 0)
         else:
             self.write("grip", 0, position)
 
     def close_gripper(self, force_threshold=-1, position=None):
+        logger.debug("Sending gripper close command: %s" % str(position))
         if position is None:
             self.write("grip", 1, force_threshold)
         else:
             self.write("grip", 1, force_threshold, position)
 
     def toggle_gripper(self, force_threshold=-1, position=None):
+        logger.debug("Sending gripper toggle command: %s" % str(position))
         if position is None:
             self.write("grip", 2, force_threshold)
         else:
             self.write("grip", 2, force_threshold, position)
+
+    def set_gripper(self, position, force_threshold=-1):
+        position = max(robot_config.gripper_open, position)
+        position = min(robot_config.gripper_closed, position)
+        position = int(position)
+        if position < self.gripper_state["pos"]:
+            self.open_gripper(position)
+        else:
+            self.close_gripper(force_threshold, position)
 
     def tilter_up(self):
         self.write("tilt", 0)
@@ -205,6 +222,7 @@ class Dodobot(Robot):
 
     def set_tilter(self, pos):
         self.sent_tilt_position = pos
+        logger.debug("Sending tilt command: %s" % (self.sent_tilt_position))
         self.write("tilt", 3, pos)
 
     def set_linear_max_speed(self, max_speed):
@@ -287,11 +305,13 @@ class Dodobot(Robot):
             self.linear_vel_command = 0.0
             self.drive_cmd_rotate = 0.0
             self.drive_cmd_forward = 0.0
+            self.grab_speed = 0
             self.tilt_speed = 0
 
         if self.tilt_speed != 0:
             self.set_tilter(self.tilt_position + self.tilt_speed)
-            logger.info("Sending tilt command: %s" % (self.sent_tilt_position))
+        if self.grab_speed != 0:
+            self.set_gripper(self.gripper_state["pos"] + self.grab_speed, robot_config.force_threshold)
 
         self.update_drive_command()
         self.update_linear_command()
@@ -314,6 +334,13 @@ class Dodobot(Robot):
                 else:
                     self.linear_vel_command = int(-self.stepper_max_speed * value)
                 # self.prev_drive_command_time = time.time()
+            elif name == "rx":
+                if abs(value) > self.grab_joy_val_threshold:
+                    value -= math.copysign(self.grab_joy_val_threshold, value)
+                    value *= 1.0 / (1.0 - self.grab_joy_val_threshold)
+                    self.grab_speed = int(-self.max_grab_speed * value)
+                else:
+                    self.grab_speed = 0
             elif name == "x":
                 self.drive_cmd_rotate = self.drive_max_speed * value
                 self.prev_drive_command_time = time.time()
@@ -328,8 +355,8 @@ class Dodobot(Robot):
             elif name == "hat0y":
                 self.drive_cmd_forward = -self.drive_min_speed * value
                 self.prev_drive_command_time = time.time()
-            elif name == "rz":
-                self.set_brake_pedal_gripper(value)
+            # elif name == "rz":
+            #     self.set_brake_pedal_gripper(value)
 
     def update_button_events(self):
         for name, value in self.joystick.get_button_events():
@@ -340,8 +367,8 @@ class Dodobot(Robot):
                     self.home_linear()
                 elif name == "b":
                     logger.info("Toggling gripper")
-                    self.toggle_gripper(750)
-                    self.reset_brake_pedal_gripper()
+                    self.toggle_gripper(robot_config.force_threshold)
+                    # self.reset_brake_pedal_gripper()
                 elif name == "x":
                     logger.info("Toggling tilter")
                     self.tilter_toggle()
@@ -349,6 +376,7 @@ class Dodobot(Robot):
                     self.set_active(not self.is_active)
                 elif name == "tl":
                     self.enable_tilt_axis = True
+                    self.linear_vel_command = 0.0
                 # elif name == "tr":
                 elif name == "thumbl":
                     self.thumbl_pressed = True
@@ -357,6 +385,7 @@ class Dodobot(Robot):
             else:
                 if name == "tl":
                     self.enable_tilt_axis = False
+                    self.tilt_speed = 0
                 # elif name == "tr":
                 elif name == "thumbl":
                     self.set_pid_event = True
@@ -380,7 +409,7 @@ class Dodobot(Robot):
         logger.info("brake_pedal_gripper_threshold: %s" % self.brake_pedal_gripper_threshold)
 
         if gripper_pos > self.brake_pedal_gripper_threshold:
-            self.close_gripper(100, gripper_pos)
+            self.close_gripper(robot_config.force_threshold, gripper_pos)
             self.brake_pedal_gripper_threshold = gripper_pos
 
     def reset_brake_pedal_gripper(self):

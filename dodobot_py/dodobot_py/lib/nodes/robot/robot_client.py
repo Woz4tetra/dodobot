@@ -465,7 +465,7 @@ class Robot(Node):
         logger.debug("buffer: %s" % buffer)
 
         if len(buffer) < 5:
-            logger.error("Received packet has an invalid number of characters! %s" % repr(buffer.decode()))
+            logger.error("Received packet has an invalid number of characters! %s" % repr(buffer))
             self.read_packet_num += 1
             return False
 
