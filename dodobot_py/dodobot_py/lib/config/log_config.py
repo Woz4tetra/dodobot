@@ -4,14 +4,14 @@ from .config import Config
 
 
 class LogConfig(Config):
-    def __init__(self):
+    def __init__(self, base_dir):
         self.name = "dodobot"
         self.level = logging.DEBUG
         self.file_name = "dodobot.log"
         self.suffix = "%Y-%m-%d"
         self.format = "%(levelname)s\t%(asctime)s\t[%(name)s, %(filename)s:%(lineno)d]\t%(message)s"
 
-        super(LogConfig, self).__init__("logging.yaml")
+        super(LogConfig, self).__init__("logging.yaml", base_dir)
 
         self.dir = os.path.join(self.base_dir, "logs")
         if not os.path.isdir(self.dir):

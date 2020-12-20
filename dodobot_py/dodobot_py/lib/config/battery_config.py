@@ -2,7 +2,7 @@ from .config import Config
 
 
 class BatteryConfig(Config):
-    def __init__(self):
+    def __init__(self, base_dir):
         self.full_voltage = 8.5
         self.ok_voltage = 7
         self.low_voltage = 6.3
@@ -10,7 +10,7 @@ class BatteryConfig(Config):
         self.critical_voltage_timeout_s = 3.0
         self.battery_log_report_time = 30.0
 
-        super(BatteryConfig, self).__init__("battery.yaml")
+        super(BatteryConfig, self).__init__("battery.yaml", base_dir)
 
     def to_dict(self):
         return {

@@ -3,11 +3,10 @@ import yaml
 
 
 class Config:
-    def __init__(self, config_name):
+    def __init__(self, config_name, base_dir):
         if not config_name.endswith(".yaml"):
             raise ValueError("Invalid config extension: {}. Must be .yaml".format(config_name))
-        self.base_dir = "~/.local/dodobot/dodobot_py"
-        self.base_dir = os.path.expanduser(self.base_dir)
+        self.base_dir = os.path.expanduser(base_dir)
 
         self.config_path = os.path.join(self.base_dir, "config", config_name)
         self.config_dir = os.path.dirname(self.config_path)
