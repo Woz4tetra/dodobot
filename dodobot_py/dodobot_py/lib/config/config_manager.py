@@ -8,11 +8,6 @@ from .robot_config import RobotConfig
 from .sounds_config import SoundsConfig
 
 
-def get_config_base(cls, name):
-    if name not in cls.instances:
-        cls.instances[name] = cls.configs[name]()
-    return cls.instances[name]
-
 class ConfigManager:
     configs = dict(
         log_config=LogConfig,
@@ -31,11 +26,8 @@ class ConfigManager:
         raise Exception("{} is class only".format(self.__class__.__name__))
 
     @classmethod
-    def init_configs(cls):
+    def init_configs(cls, base_dir):
         for name, config_cls in cls.configs.items():
-            cls.instances[name] = config_cls()
+            cls.instances[name] = config_cls(base_dir)
             instance = cls.instances[name]
             setattr(cls, "get_" + name, classmethod(lambda c, instance=instance: instance))
-
-
-ConfigManager.init_configs()

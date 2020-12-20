@@ -27,10 +27,10 @@ class LoggerManager:
         raise Exception("{} is class only".format(self.__class__.__name__))
 
     @classmethod
-    def get_logger(cls):
+    def get_logger(cls, log_only=False):
         if cls.logger is not None:
             return cls.logger
-        cls.logger = cls._create_logger(**log_config.to_dict())
+        cls.logger = cls._create_logger(**log_config.to_dict(), log_only=log_only)
         return cls.logger
 
     @staticmethod
@@ -40,6 +40,7 @@ class LoggerManager:
         level = kwargs["level"]
         format = kwargs["format"]
         suffix = kwargs["suffix"]
+        log_only = kwargs["log_only"]
 
         logger = logging.getLogger(name)
         logger.setLevel(level)
@@ -55,9 +56,10 @@ class LoggerManager:
         rotate_handle.suffix = suffix
         logger.addHandler(rotate_handle)
 
-        print_handle = logging.StreamHandler()
-        print_handle.setLevel(level)
-        print_handle.setFormatter(formatter)
-        logger.addHandler(print_handle)
+        if not log_only:  # add printing to stdout if this is not true
+            print_handle = logging.StreamHandler()
+            print_handle.setLevel(level)
+            print_handle.setFormatter(formatter)
+            logger.addHandler(print_handle)
 
         return logger
