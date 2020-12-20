@@ -16,6 +16,8 @@ class RobotConfig(Config):
         self.joystick_deadzone = 0.1
         self.max_joy_val = 1.0
         self.max_tilt_speed = 5.0
+        self.max_grab_speed = 1.0
+        self.force_threshold = 700
 
         self.shutdown_time_limit = 3.0
 
