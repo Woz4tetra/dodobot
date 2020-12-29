@@ -1,3 +1,4 @@
+import os
 import math
 import time
 import pprint
@@ -67,10 +68,10 @@ class Dodobot(Robot):
         }
 
         self.breakout_events = {
-            1 : "BRICK_COLLIDE",
-            2 : "WIN_CONDITION",
-            3 : "BALL_OUT_OF_BOUNDS",
-            4 : "PADDLE_COLLIDE",
+            1: "BRICK_COLLIDE",
+            2: "WIN_CONDITION",
+            3: "BALL_OUT_OF_BOUNDS",
+            4: "PADDLE_COLLIDE",
         }
 
         self.tilt_position = 0
@@ -121,6 +122,7 @@ class Dodobot(Robot):
                 robot_config.startup_image_size,
                 robot_config.startup_image_quality,
             )
+            self.write_file("~/venusaur-f.gif", "VENUSAUR.GIF")
         except BaseException as e:
             logger.error(str(e), exc_info=True)
 
@@ -471,3 +473,13 @@ class Dodobot(Robot):
 
         logger.info("Writing image: %s" % len_img_bytes)
         self.write_large("img", img_bytes)
+
+    def write_file(self, path, dest_name):
+        if not os.path.isfile(path):
+            logger.error("File %s does not exist" % path)
+            return
+
+        logger.info("Writing file %s to %s" % (path, dest_name))
+        self.write("setpath", dest_name)
+        with open(path, 'rb') as file:
+            self.write_large("file", file.read())
