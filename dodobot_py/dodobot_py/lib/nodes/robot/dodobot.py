@@ -118,11 +118,11 @@ class Dodobot(Robot):
         time.sleep(0.35)
         try:
             self.write_image(
+                robot_config.startup_image_name,
                 robot_config.startup_image_path,
                 robot_config.startup_image_size,
                 robot_config.startup_image_quality,
             )
-            self.write_file("~/venusaur-f.gif", "VENUSAUR.GIF")
         except BaseException as e:
             logger.error(str(e), exc_info=True)
 
@@ -460,7 +460,7 @@ class Dodobot(Robot):
     def pre_serial_stop_callback(self):
         self.network_str_task.stop()
 
-    def write_image(self, path, size, quality=15):
+    def write_image(self, name, path, size, quality=15):
         img_bytes = image.bytes_from_file(path, size, quality)
         if len(img_bytes) == 0:
             logger.warn("Image is empty!")
@@ -472,12 +472,18 @@ class Dodobot(Robot):
             return
 
         logger.info("Writing image: %s" % len_img_bytes)
-        self.write_large("img", img_bytes)
+        self.write("setpath", name)
+        self.write_large("file", img_bytes)
 
     def write_file(self, path, dest_name):
         if not os.path.isfile(path):
             logger.error("File %s does not exist" % path)
             return
+        if len(dest_name) == 0:
+            logger.error("Destination name is empty!")
+            return
+        if len(dest_name) > 12:
+            logger.warn("Destination file name is longer than 12 character. Name will be truncated on device")
 
         logger.info("Writing file %s to %s" % (path, dest_name))
         self.write("setpath", dest_name)

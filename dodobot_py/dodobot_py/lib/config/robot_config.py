@@ -33,6 +33,7 @@ class RobotConfig(Config):
 
         self.breakout_level_config = "########\n##oooo##\n#oo##oo#\n########"
 
+        self.startup_image_name = ""
         self.startup_image_path = ""
         self.startup_image_size = (160, 108)
         self.startup_image_quality = 15
