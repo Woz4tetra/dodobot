@@ -4,7 +4,7 @@ from .config import Config
 
 
 class DataLogConfig(Config):
-    def __init__(self):
+    def __init__(self, base_dir):
         self.name = "dodobot_data"
         self.level = logging.DEBUG
         self.file_name = "data"
@@ -13,7 +13,7 @@ class DataLogConfig(Config):
         self.log_freq_hz = 1.0
         self.enabled = False
 
-        super(DataLogConfig, self).__init__("data_logging.yaml")
+        super(DataLogConfig, self).__init__("data_logging.yaml", base_dir)
 
         self.dir = os.path.join(self.base_dir, "data")
         if not os.path.isdir(self.dir):

@@ -3,7 +3,7 @@ from .config import Config
 
 
 class RobotConfig(Config):
-    def __init__(self):
+    def __init__(self, base_dir):
         self.pid_ks = {}
         self.check_ready_timeout = 5.0
         self.write_timeout = 1.0
@@ -37,7 +37,7 @@ class RobotConfig(Config):
         self.startup_image_size = (160, 108)
         self.startup_image_quality = 15
 
-        super(RobotConfig, self).__init__("robot.yaml")
+        super(RobotConfig, self).__init__("robot.yaml", base_dir)
 
     def load(self):
         super(RobotConfig, self).load()
