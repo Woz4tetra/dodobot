@@ -18,7 +18,7 @@ pid_ks:
 
 check_ready_timeout: 5.0
 write_timeout: 1.0
-packet_read_timeout: 0.005
+packet_read_timeout: 0.05
 
 drive_command_timeout: 30.0
 drive_command_update_rate: 15.0

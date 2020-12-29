@@ -251,7 +251,11 @@ class Dodobot(Robot):
 
     def set_pid_ks(self):
         logger.info("Writing PID Ks: %s" % self.pid_ks)
-        self.write("ks", *self.pid_ks)
+        for attempt in range(5):
+            self.write("ks", *self.pid_ks)
+            if self.wait_for_ok():
+                break
+            logger.warn("Failed to receive ok signal for PID. Trying again.")
 
     def set_gripper_config(self):
         logger.info(

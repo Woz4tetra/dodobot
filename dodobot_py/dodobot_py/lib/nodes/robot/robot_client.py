@@ -331,7 +331,7 @@ class Robot(Node):
 
     def wait_for_ok(self, packet_num=None):
         if packet_num is None:
-            packet_num = self.write_packet_num
+            packet_num = self.write_packet_num - 1
         self.wait_for_ok_reqs[packet_num] = None
         start_timer = time.time()
         while True:
@@ -341,7 +341,7 @@ class Robot(Node):
             if self.wait_for_ok_reqs[packet_num] is not None:
                 error_code = self.wait_for_ok_reqs.pop(packet_num)
                 logger.info("Received response for packet #%s: %s" % (packet_num, error_code))
-                return error_code == 0
+                return error_code == 0 or error_code == 6
             time.sleep(0.01)
 
     def write_large(self, name, arg):
@@ -435,7 +435,7 @@ class Robot(Node):
                 if c2 == self.PACKET_START_1:
                     return True
             elif c1 == self.PACKET_STOP:
-                time.sleep(self.update_delay)
+                # time.sleep(self.update_delay)
                 logger.info("Device message: %s" % (msg_buffer))
                 msg_buffer = b""
             else:
