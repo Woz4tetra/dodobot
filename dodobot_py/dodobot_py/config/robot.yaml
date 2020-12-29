@@ -18,7 +18,7 @@ pid_ks:
 
 check_ready_timeout: 5.0
 write_timeout: 1.0
-packet_read_timeout: 0.05
+packet_read_timeout: 0.005
 
 drive_command_timeout: 30.0
 drive_command_update_rate: 15.0
@@ -52,4 +52,4 @@ breakout_level_config: |
 
 startup_image_path: dodobot-py.jpg
 startup_image_size: [160, 108]
-startup_image_quality: 35
+startup_image_quality: 100

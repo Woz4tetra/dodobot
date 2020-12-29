@@ -113,6 +113,9 @@ class Robot(Node):
         self.prev_display_countdown = None
         self.shutdown_time_limit = robot_config.shutdown_time_limit
 
+        self.wait_for_ok_reqs = {}
+        self.packet_ok_timeout = 1.0
+
     def start(self):
         logger.info("Starting rover client")
 
@@ -134,6 +137,10 @@ class Robot(Node):
         if category == "txrx" and self.parse_segments("dd"):
             packet_num = self.parsed_data[0]
             error_code = self.parsed_data[1]
+
+            if packet_num in self.wait_for_ok_reqs:
+                self.wait_for_ok_reqs[packet_num] = error_code
+                logger.info("txrx ok_req %s: %s" % (packet_num, error_code))
 
             if error_code != 0:
                 self.log_packet_error_code(error_code, packet_num)
@@ -322,6 +329,21 @@ class Robot(Node):
     def to_float_bytes(floating_point):
         return struct.pack('f', floating_point)
 
+    def wait_for_ok(self, packet_num=None):
+        if packet_num is None:
+            packet_num = self.write_packet_num
+        self.wait_for_ok_reqs[packet_num] = None
+        start_timer = time.time()
+        while True:
+            if time.time() - start_timer > self.packet_ok_timeout:
+                logger.warn("Timed out while waiting for response from packet #%s" % packet_num)
+                return False
+            if self.wait_for_ok_reqs[packet_num] is not None:
+                error_code = self.wait_for_ok_reqs.pop(packet_num)
+                logger.info("Received response for packet #%s: %s" % (packet_num, error_code))
+                return error_code == 0
+            time.sleep(0.01)
+
     def write_large(self, name, arg):
         assert type(arg) == str or type(arg) == bytes
         if type(arg) == str:
@@ -334,6 +356,9 @@ class Robot(Node):
         num_segments = len(segments)
         for index, segment in enumerate(segments):
             self.write(name, index, num_segments, segment)
+            if not self.wait_for_ok():
+                logger.warn("Failed to receive ok signal on segment %s of %s. %s" % (index + 1, num_segments, name))
+                break
 
     def write(self, name, *args):
         if self.serial_device_paused:
@@ -347,7 +372,7 @@ class Robot(Node):
             elif type(arg) == float:
                 packet += self.to_float_bytes(arg)
             elif type(arg) == str or type(arg) == bytes:
-                assert len(arg) < self.large_packet_len, arg
+                assert len(arg) <= self.large_packet_len, arg
                 len_bytes = self.to_uint16_bytes(len(arg))
                 if type(arg) == str:
                     arg = arg.encode()
