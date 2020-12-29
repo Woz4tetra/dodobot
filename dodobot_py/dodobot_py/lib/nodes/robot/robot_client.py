@@ -55,6 +55,8 @@ class Robot(Node):
         self.PACKET_SEP = b'\t'
         self.PACKET_SEP_STR = b'\t'
 
+        self.large_packet_len = 0x1000
+
         self.ready_state = {
             "name"    : "",
             "is_ready": False,
@@ -320,24 +322,32 @@ class Robot(Node):
     def to_float_bytes(floating_point):
         return struct.pack('f', floating_point)
 
+    def write_large(self, name, arg):
+        assert type(arg) == str or type(arg) == bytes
+        if type(arg) == str:
+            arg = arg.encode()
+
+        segments = []
+        for index in range(0, len(arg), self.large_packet_len):
+            offset = min(self.large_packet_len, len(arg) - index)
+            segments.append(arg[index: index + offset])
+        num_segments = len(segments)
+        for index, segment in enumerate(segments):
+            self.write(name, index, num_segments, segment)
+
     def write(self, name, *args):
         if self.serial_device_paused:
             logger.debug("Serial device is paused. Skipping write: %s, %s" % (str(name), str(args)))
             return
 
-        # packet = b""
-        # packet += str(self.write_packet_num).encode()
-        # packet += self.PACKET_SEP + str(name).encode()
-
-        packet = self.to_int32_bytes(self.write_packet_num)
-        packet += str(name).encode() + self.PACKET_SEP
+        packet = self.packet_header(name)
         for arg in args:
             if type(arg) == int:
                 packet += self.to_int32_bytes(arg)
             elif type(arg) == float:
                 packet += self.to_float_bytes(arg)
             elif type(arg) == str or type(arg) == bytes:
-                assert len(arg) < 0x10000, arg
+                assert len(arg) < self.large_packet_len, arg
                 len_bytes = self.to_uint16_bytes(len(arg))
                 if type(arg) == str:
                     arg = arg.encode()
@@ -345,6 +355,26 @@ class Robot(Node):
             else:
                 logger.warn("Invalid argument type: %s, %s" % (type(arg), arg))
 
+        packet = self.packet_footer(packet)
+        self._write_packet(packet)
+
+    def _write_packet(self, packet):
+        with self.write_lock:
+            logger.debug("Writing %s" % str(packet))
+            try:
+                self.device.write(packet)
+            except BaseException as e:
+                logger.error("Exception while writing packet %s: %s" % (packet, str(e)), exc_info=True)
+
+            self.write_packet_num += 1
+            time.sleep(0.0005)  # give the microcontroller a chance to not drop the next packet
+
+    def packet_header(self, name):
+        packet = self.to_int32_bytes(self.write_packet_num)
+        packet += str(name).encode() + self.PACKET_SEP
+        return packet
+
+    def packet_footer(self, packet):
         calc_checksum = 0
         for val in packet:
             calc_checksum += val
@@ -358,15 +388,7 @@ class Robot(Node):
         packet = self.PACKET_START_0 + self.PACKET_START_1 + packet_len_bytes + packet
         packet += self.PACKET_STOP
 
-        with self.write_lock:
-            logger.debug("Writing %s" % str(packet))
-            try:
-                self.device.write(packet)
-            except BaseException as e:
-                logger.error("Exception while writing packet %s: %s" % (packet, str(e)), exc_info=True)
-
-            self.write_packet_num += 1
-            time.sleep(0.0005)  # give the microcontroller a chance to not drop the next packet
+        return packet
 
     def wait_for_packet_start(self):
         begin_time = time.time()

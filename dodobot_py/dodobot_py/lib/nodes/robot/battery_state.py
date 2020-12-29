@@ -38,13 +38,13 @@ class BatteryState:
         elif self.voltage_V > battery_config.low_voltage:
             state = self.OK
             self.prev_critical_time = None
-        elif self.voltage_V <= battery_config.low_voltage:
-            state = self.LOW
-            self.prev_critical_time = None
         elif self.voltage_V <= battery_config.critical_voltage:
             state = self.CRITICAL
             if self.prev_critical_time is None:
                 self.prev_critical_time = time.time()
+        elif self.voltage_V <= battery_config.low_voltage:
+            state = self.LOW
+            self.prev_critical_time = None
         else:
             state = self.state
 

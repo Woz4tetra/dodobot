@@ -461,9 +461,9 @@ class Dodobot(Robot):
             return
 
         len_img_bytes = len(img_bytes)
-        if len_img_bytes > 0x4000:
+        if len_img_bytes > 0x20000:
             logger.warn("Image is too large: %s!" % len_img_bytes)
             return
 
         logger.info("Writing image: %s" % len_img_bytes)
-        self.write("img", img_bytes)
+        self.write_large("img", img_bytes)
