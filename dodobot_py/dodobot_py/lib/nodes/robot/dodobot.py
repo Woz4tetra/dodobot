@@ -116,15 +116,20 @@ class Dodobot(Robot):
         self.sounds["startup"].play()
 
         time.sleep(0.35)
-        try:
-            self.write_image(
-                robot_config.startup_image_name,
-                robot_config.startup_image_path,
-                robot_config.startup_image_size,
-                robot_config.startup_image_quality,
-            )
-        except BaseException as e:
-            logger.error(str(e), exc_info=True)
+        # try:
+        #     self.write_file("/home/ben/chansey.gif", "CHANSEY.GIF")
+        # except BaseException as e:
+        #     logger.error(str(e), exc_info=True)
+        # try:
+        #     self.write_image(
+        #         robot_config.startup_image_name,
+        #         robot_config.startup_image_path,
+        #         robot_config.startup_image_size,
+        #         robot_config.startup_image_quality,
+        #     )
+        # except BaseException as e:
+        #     logger.error(str(e), exc_info=True)
+        self.write("listdir", "/")
 
     def process_packet(self, category):
         super(Dodobot, self).process_packet(category)
@@ -182,6 +187,11 @@ class Dodobot(Robot):
             logger.info("bump 1: %s, 2: %s" % (bump1_state, bump2_state))
             if bump1_state or bump2_state:
                 self.sounds["bumper_sound"].play()
+        elif category == "listdir" and self.parse_segments("sd"):
+            name = self.parsed_data[0]
+            size = self.parsed_data[1]
+
+            logger.info("filename: %s, size: %s" % (name, size))
 
     def open_gripper(self, position=None):
         logger.debug("Sending gripper open command: %s" % str(position))
