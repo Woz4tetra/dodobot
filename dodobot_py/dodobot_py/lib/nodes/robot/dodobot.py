@@ -74,6 +74,9 @@ class Dodobot(Robot):
             4: "PADDLE_COLLIDE",
         }
 
+        # 0...9
+        self.ir_code_numbers = [0x30cf, 0x08f7, 0x8877, 0x48B7, 0x28D7, 0xA857, 0x6897, 0x18E7, 0x9867, 0x58A7]
+
         self.tilt_position = 0
         self.sent_tilt_position = 0
         self.tilt_speed = 0
@@ -143,6 +146,8 @@ class Dodobot(Robot):
             elif ir_code == 0x40bf:  # VOL+
                 self.sounds.controller.set_volume(self.sounds.controller.volume + 0.05)
                 self.sounds["volume_change"].play()
+            elif ir_code in self.ir_code_numbers:
+                self.sounds["numpad"].play()
 
         elif category == "tilt" and self.parse_segments("ud"):
             # recv_time = self.parsed_data[0]

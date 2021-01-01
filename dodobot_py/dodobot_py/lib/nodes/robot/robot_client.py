@@ -10,7 +10,7 @@ from .task import Task
 from ..node import Node
 from lib.config import ConfigManager
 from lib.logger_manager import LoggerManager
-from lib.exceptions import ShutdownException, LowBatteryException, DeviceNotReadyException
+from lib.exceptions import *
 
 device_port_config = ConfigManager.get_device_port_config()
 robot_config = ConfigManager.get_robot_config()
@@ -187,11 +187,24 @@ class Robot(Node):
         elif category == "unlatch" and self.parse_segments("u"):
             logger.warning("Unlatch signal received! System unlatching soon.")
 
-        elif category == "shutdown" and self.parse_segments("s"):
+        elif category == "control" and self.parse_segments("sd"):
             name = self.parsed_data[0]
-            if name == "dodobot":
-                logger.info("'Shutdown now' signal received")
-                raise ShutdownException
+            control_type = self.parsed_data[1]
+            if name == b"dodobot":
+                if control_type == 0:
+                    logger.info("'Shutdown now' signal received")
+                    raise ShutdownException
+                elif control_type == 1:
+                    logger.info("'Reboot' signal received")
+                    raise RebootException
+                elif control_type == 2:
+                    logger.info("'Restart ROS' signal received")
+                elif control_type == 3:
+                    logger.info("'Restart client' signal received")
+                    raise RelaunchException
+                elif control_type == 4:
+                    logger.info("'Restart microcontroller' signal received")
+                    raise DeviceRestartException
             else:
                 logger.warning("Received name doesn't match expected: %s" % name)
 
@@ -574,9 +587,7 @@ class Robot(Node):
 
         try:
             self.process_packet(category)
-        except ShutdownException:
-            raise
-        except LowBatteryException:
+        except (ShutdownException, RebootException, RelaunchException, DeviceRestartException, LowBatteryException):
             raise
         except BaseException as e:
             logger.error("Exception while processing packet %s" % (str(e)), exc_info=True)
