@@ -5,7 +5,7 @@ import pprint
 
 from .robot_client import Robot
 from .task import Task
-from .network_info import NetworkInfo
+from .network_proxy import NetworkProxy
 from . import image
 from lib.config import ConfigManager
 from lib.logger_manager import LoggerManager
@@ -95,12 +95,7 @@ class Dodobot(Robot):
         self.joystick = None
         self.sounds = None
 
-        self.network_str_task = Task(self.write_network_task)
-        self.network_str_task.thread.daemon = True
-        self.network_str_delay = 5.0 * 60.0
-        self.network_str_delay_no_connection = 1.0
-        self.interface_name = "wlan0"
-        self.network_info = NetworkInfo([self.interface_name])
+        self.network_proxy = NetworkProxy()
 
     def start(self):
         super(Dodobot, self).start()
@@ -113,8 +108,6 @@ class Dodobot(Robot):
         self.set_breakout_level()
         self.set_linear_max_speed(self.stepper_max_speed)
         self.set_linear_max_accel(self.stepper_max_accel)
-
-        self.network_str_task.start()
 
         self.sounds["startup"].play()
 
@@ -197,6 +190,20 @@ class Dodobot(Robot):
             size = self.parsed_data[1]
 
             logger.info("filename: %s, size: %s" % (name, size))
+        elif category == "network" and self.parse_segments("d"):
+            command_type = self.parsed_data[0]
+            if command_type == 0:
+                if self.parse_next_segment("d"):
+                    wifi_state = bool(self.parsed_data[1])
+                    logger.info("Turning wifi %s" % ("on" if wifi_state else "off"))
+                    output = self.network_proxy.set_radio_state(wifi_state)
+                    time.sleep(0.01)  # wait for command to propagate
+                    if output:
+                        logger.info("Result: %s" % str(output))
+            # elif command_type == 1:  just a refresh
+
+            self.write_network_info()
+
 
     def open_gripper(self, position=None):
         logger.debug("Sending gripper open command: %s" % str(position))
@@ -292,29 +299,16 @@ class Dodobot(Robot):
             self.pid_ks.append(robot_config.pid_ks[name])
         logger.info("Set PID Ks to:\n%s" % pprint.pformat(robot_config.pid_ks))
 
-    def write_network_info(self, kwargs):
-        logger.debug("Writing networking info:\n%s" % kwargs)
-        self.write("network", kwargs["ip"], kwargs["nmask"], kwargs["bcast"], kwargs["name"], kwargs["error"])
+    def write_network_info(self):
+        info, devices = self.network_proxy.get_report()
+        wifi_state = self.network_proxy.get_radio_state()
+        logger.info("Writing networking info:\n%s" % info)
+        logger.info("Wifi state: %s" % wifi_state)
 
-    def write_network_task(self, should_stop):
-        while True:
-            if should_stop():
-                return
-            updated = self.network_info.update()
-            if self.interface_name in updated:
-                self.write_network_info(self.network_info.info[self.interface_name])
-
-            if self.network_info.info[self.interface_name]["error"] == " ":
-                time.sleep(self.network_str_delay)
-            else:
-                time.sleep(self.network_str_delay_no_connection)
+        self.write("network", int(wifi_state), str(info))
 
     def update(self):
         super(Dodobot, self).update()
-
-        if not self.network_str_task.is_errored():
-            logger.error("Error detected in network str task. Raising exception")
-            raise self.network_str_task.thread_exception
 
         self.update_joystick()
 
@@ -473,7 +467,7 @@ class Dodobot(Robot):
             logger.info("A: %s, B: %s" % (cmd_A, cmd_B))
 
     def pre_serial_stop_callback(self):
-        self.network_str_task.stop()
+        pass   # stop any running tasks
 
     def write_image(self, name, path, size, quality=15):
         img_bytes = image.bytes_from_file(path, size, quality)
