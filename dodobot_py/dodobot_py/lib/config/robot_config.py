@@ -31,7 +31,7 @@ class RobotConfig(Config):
         self.gripper_open = 0
         self.gripper_closed = 180
 
-        self.breakout_level_config = "########\n##oooo##\n#oo##oo#\n########"
+        self.breakout_levels = "breakout"
 
         self.startup_image_name = ""
         self.startup_image_path = ""
@@ -45,6 +45,7 @@ class RobotConfig(Config):
     def load(self):
         super(RobotConfig, self).load()
         self.startup_image_path = os.path.join(self.config_dir, self.startup_image_path)
+        self.breakout_levels = os.path.join(self.config_dir, self.breakout_levels)
 
     def to_dict(self):
         return {
@@ -63,7 +64,6 @@ class RobotConfig(Config):
             "drive_min_speed": self.drive_min_speed,
             "gripper_open": self.gripper_open,
             "gripper_closed": self.gripper_closed,
-            "breakout_level_config": self.breakout_level_config,
             "startup_image_path": self.startup_image_path,
             "startup_image_size": self.startup_image_size,
             "startup_image_quality": self.startup_image_quality,

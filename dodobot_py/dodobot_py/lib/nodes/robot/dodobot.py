@@ -106,17 +106,13 @@ class Dodobot(Robot):
 
         self.set_pid_ks()
         self.set_gripper_config()
-        self.set_breakout_level()
         self.set_linear_max_speed(self.stepper_max_speed)
         self.set_linear_max_accel(self.stepper_max_accel)
 
         self.sounds["startup"].play()
 
         time.sleep(0.35)
-        # try:
-        #     self.write_file("/home/ben/chansey.gif", "CHANSEY.GIF")
-        # except BaseException as e:
-        #     logger.error(str(e), exc_info=True)
+        self.write_levels(robot_config.breakout_levels)
         # try:
         #     self.write_image(
         #         robot_config.startup_image_name,
@@ -288,10 +284,23 @@ class Dodobot(Robot):
             "Setting gripper limits open: %s, closed: %s" % (robot_config.gripper_open, robot_config.gripper_closed))
         self.write("gripcfg", int(robot_config.gripper_open), int(robot_config.gripper_closed))
 
-    def set_breakout_level(self):
-        level_config = robot_config.breakout_level_config
-        level_config = level_config.replace("\n", "-")
-        self.write("breakout", level_config)
+    def load_level(self, path):
+        with open(path) as file:
+            level_config = file.read()
+        return level_config.encode()
+
+    def write_levels(self, dir_path):
+        try:
+            for filename in os.listdir(dir_path):
+                if "BREAK" not in filename.upper():
+                    continue
+                dest_name = os.path.splitext(filename)[0]
+                path = os.path.join(dir_path, filename)
+                level = self.load_level(path)
+                logger.info("Writing level %s to %s" % (path, dest_name))
+                self.write_sd(level, dest_name)
+        except BaseException as e:
+            logger.error(str(e), exc_info=True)
 
     def reload_pid_ks(self):
         robot_config.load()
@@ -490,20 +499,25 @@ class Dodobot(Robot):
             return
 
         logger.info("Writing image: %s" % len_img_bytes)
-        self.write("setpath", name)
-        self.write_large("file", img_bytes)
+        self.write_sd(img_bytes, name)
 
-    def write_file(self, path, dest_name):
-        if not os.path.isfile(path):
-            logger.error("File %s does not exist" % path)
-            return
+    def write_sd(self, data, dest_name):
         if len(dest_name) == 0:
             logger.error("Destination name is empty!")
             return
         if len(dest_name) > 12:
             logger.warn("Destination file name is longer than 12 character. Name will be truncated on device")
+        if type(data) != bytes:
+            logger.warn("Data is not bytes: %s" % str(data))
 
-        logger.info("Writing file %s to %s" % (path, dest_name))
+        logger.info("Writing to SD: %s" % str(dest_name))
+
         self.write("setpath", dest_name)
+        self.write_large("file", data)
+
+    def write_file(self, path, dest_name):
+        if not os.path.isfile(path):
+            logger.error("File %s does not exist" % path)
+            return
         with open(path, 'rb') as file:
-            self.write_large("file", file.read())
+            self.write_sd(file.read(), dest_name)

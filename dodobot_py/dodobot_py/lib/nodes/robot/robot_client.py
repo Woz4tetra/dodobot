@@ -75,6 +75,8 @@ class Robot(Node):
             "is_active"    : False,
             "battery_ok"   : True,
             "motors_active": False,
+            "loop_rate"    : 0.0,
+            "free_mem"     : 0,
         }
 
         self.battery_state = BatteryState()
@@ -171,11 +173,12 @@ class Robot(Node):
                 raise LowBatteryException(
                     "Battery is critically low: {load_voltage_V:0.2f}!! Shutting down.".format(**self.power_state))
 
-        elif category == "state" and self.parse_segments("uddd"):
+        elif category == "state" and self.parse_segments("uddfu"):
             self.robot_state["recv_time"] = self.get_device_time(self.parsed_data[0])
-            self.robot_state["is_active"] = self.parsed_data[1]
-            self.robot_state["battery_ok"] = self.parsed_data[2]
-            self.robot_state["motors_active"] = self.parsed_data[3]
+            self.robot_state["battery_ok"] = self.parsed_data[1]
+            self.robot_state["motors_active"] = self.parsed_data[2]
+            self.robot_state["loop_rate"] = self.parsed_data[3]
+            self.robot_state["free_mem"] = self.parsed_data[4]
 
         elif category == "latch_btn" and self.parse_segments("ud"):
             button_state = self.parsed_data[1]
@@ -300,7 +303,9 @@ class Robot(Node):
 
         current_time = time.time()
         if current_time - self.prev_packet_num_report_time > 60.0:
-            logger.info("Packet numbers. Read: %s; Write: %s" % (self.read_packet_num, self.write_packet_num))
+            logger.info("Packet numbers: Read: %s. Write: %s | Free memory: %s" % (
+                self.read_packet_num, self.write_packet_num, self.robot_state["free_mem"]
+            ))
             self.prev_packet_num_report_time = current_time
 
     def stop(self):
