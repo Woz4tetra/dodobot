@@ -54,3 +54,5 @@ startup_image_name: DBSPLASH.JPG
 startup_image_path: dodobot-py.jpg
 startup_image_size: [160, 108]
 startup_image_quality: 100
+
+wifi_name: "wlan0"

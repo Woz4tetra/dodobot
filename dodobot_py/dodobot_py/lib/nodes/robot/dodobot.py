@@ -95,6 +95,7 @@ class Dodobot(Robot):
         self.joystick = None
         self.sounds = None
 
+        self.interface_name = robot_config.wifi_name
         self.network_proxy = NetworkProxy()
 
     def start(self):
@@ -200,10 +201,11 @@ class Dodobot(Robot):
                     time.sleep(0.01)  # wait for command to propagate
                     if output:
                         logger.info("Result: %s" % str(output))
-            # elif command_type == 1:  just a refresh
-
-            self.write_network_info()
-
+                self.write_network_info()
+            elif command_type == 1:  # just a refresh
+                self.write_network_info()
+            elif command_type == 2:  # get list of networks
+                self.write_network_list()
 
     def open_gripper(self, position=None):
         logger.debug("Sending gripper open command: %s" % str(position))
@@ -306,6 +308,13 @@ class Dodobot(Robot):
         logger.info("Wifi state: %s" % wifi_state)
 
         self.write("network", int(wifi_state), str(info))
+
+    def write_network_list(self):
+        info = self.network_proxy.get_list_report(self.interface_name, 15)
+        logger.info("Writing network list:")
+        for index, line in enumerate(info):
+            logger.info("Network: %s" % str(line))
+            self.write("netlist", int(index), str(line[0]), int(line[1]))
 
     def update(self):
         super(Dodobot, self).update()

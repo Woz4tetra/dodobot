@@ -38,6 +38,8 @@ class RobotConfig(Config):
         self.startup_image_size = (160, 108)
         self.startup_image_quality = 15
 
+        self.wifi_name = "wlan0"
+
         super(RobotConfig, self).__init__("robot.yaml", base_dir)
 
     def load(self):
@@ -65,4 +67,6 @@ class RobotConfig(Config):
             "startup_image_path": self.startup_image_path,
             "startup_image_size": self.startup_image_size,
             "startup_image_quality": self.startup_image_quality,
+            "wifi_name": self.wifi_name,
+
         }

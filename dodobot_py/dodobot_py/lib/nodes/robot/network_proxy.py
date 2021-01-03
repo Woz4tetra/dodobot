@@ -1,4 +1,5 @@
 import re
+import time
 # import textwrap
 import subprocess
 
@@ -11,6 +12,8 @@ class NetworkProxy:
         self.wifi_state_command = "nmcli radio wifi".split(" ")
         self.wifi_on_command = "nmcli radio wifi on".split(" ")
         self.wifi_off_command = "nmcli radio wifi off".split(" ")
+        self.list_wifi_command = "nmcli -m multiline dev wifi list".split(" ")
+        self.rescan_wifi_command = "nmcli dev wifi rescan".split(" ")
 
         self.device_regex = r"GENERAL\.DEVICE:(.*)"  # interface name
         self.device_state_regex = r"GENERAL\.STATE:.*\((.*)\)"  # connected or not
@@ -19,6 +22,11 @@ class NetworkProxy:
 
         self.device_regex = r"DEVICE:.* (.*)"  # device name
         self.device_state_regex_list = r"STATE:.* (.*)"  # connection state
+
+        self.list_regex_templates = ["IN-USE", "SSID", "MODE", "CHAN", "RATE", "SIGNAL", "BARS", "SECURITY"]
+        self.list_regexs = []
+        for index, regex in enumerate(self.list_regex_templates):
+            self.list_regexs.append(r"%s:(.*)" % self.list_regex_templates[index])
 
         # self.network_info_wrapper = textwrap.TextWrapper(width=17, break_long_words=True, replace_whitespace=False)
 
@@ -119,10 +127,105 @@ class NetworkProxy:
         output = result.stdout.decode()
         return output
 
+    def get_list_report(self, device, length):
+        info = self.wait_for_rescan(device)
+
+        report = []
+        for index in range(min(length, len(info))):
+            device_info = info[index]
+            bars = self.bars_to_int(device_info[6])
+            line = [device_info[0] + device_info[1], bars]
+            report.append(line)
+        return report
+
+    def wait_for_rescan(self, device):
+        if not self.get_radio_state():
+            return []
+
+        result = subprocess.run(self.rescan_wifi_command, stdout=subprocess.PIPE)
+        output = result.stdout.decode()
+
+        info = []
+        while len(info) <= 1:
+            info = self.list_wifi(device)
+            time.sleep(0.25)
+
+        info.sort(key=self.sort_network_info, reverse=True)
+        return info
+
+    def list_wifi(self, device):
+        # 0: IN-USE
+        # 1: SSID
+        # 2: MODE
+        # 3: CHAN
+        # 4: RATE
+        # 5: SIGNAL
+        # 6: BARS
+        # 7: SECURITY
+
+        result = subprocess.run(self.list_wifi_command, stdout=subprocess.PIPE)
+        output = result.stdout.decode()
+
+        info_list = []
+        for subindex, regex in enumerate(self.list_regexs):
+            matches = re.finditer(regex, output, re.MULTILINE)
+
+            entries = []
+            for match in matches:
+                entry = match.group(1).strip()
+                entries.append(entry)
+            while len(info_list) < len(entries):
+                info_list.append(["" for _ in range(len(self.list_regexs))])
+
+            for index, entry in enumerate(entries):
+                info_list[index][subindex] = entry
+        return info_list
+
+    def bars_to_int(self, bars):
+        # _▂▄▆█ = [95, 9602, 9604, 9606, 9608]
+        # ▂▄▆█ = b1111
+        # ▂▄▆_ = b1110
+        # ▂▄__ = b1100
+        # ▂___ = b1000
+        # ____ = b0000
+        value = 0
+        offset = 3
+        for char in bars:
+            char = ord(char)
+            if char == 95:
+                bit_value = 0
+            else:
+                bit_value = char - 9602 + 2
+                bit_value //= bit_value
+            value |= (bit_value << offset)
+            offset -= 1
+
+            if offset < 0:
+                break
+        return value
+
+    @staticmethod
+    def sort_network_info(item):
+        # priorize "IN-USE" otherwise use "SIGNAL"
+        if item[0] == "*":
+            return 100000
+        return int(item[5])
+
+
 if __name__ == '__main__':
     def test():
+        from pprint import pprint
         proxy = NetworkProxy()
-        devices = proxy.list_devices()
-        print(proxy.generate_report(devices))
+        # devices = proxy.list_devices()
+        # print(proxy.generate_report(devices))
+        # pprint(proxy.wait_for_rescan("wlan0"))
+
+        print(bin(proxy.bars_to_int("▂▄▆█")))
+        print(bin(proxy.bars_to_int("▂▄▆_")))
+        print(bin(proxy.bars_to_int("▂▄__")))
+        print(bin(proxy.bars_to_int("▂___")))
+        print(bin(proxy.bars_to_int("____")))
+        print(bin(proxy.bars_to_int("▂▄_█")))
+        print(bin(proxy.bars_to_int("_▄_█")))
 
     test()
