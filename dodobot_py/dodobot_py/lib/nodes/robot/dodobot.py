@@ -54,6 +54,8 @@ class Dodobot(Robot):
         self.constant_names = "kp_A ki_A kd_A kp_B ki_B kd_B speed_kA speed_kB".split(" ")
         self.reload_pid_ks()
 
+        self.sd_card_directory = {}
+
         self.stepper_events = {
             1 : "ACTIVE_TRUE",
             2 : "ACTIVE_FALSE",
@@ -112,8 +114,10 @@ class Dodobot(Robot):
         self.sounds["startup"].play()
 
         time.sleep(0.35)
-        self.write_levels(robot_config.breakout_levels)
-        # try:
+        try:
+            self.write_levels(robot_config.breakout_levels)
+        except BaseException as e:
+            logger.error(str(e), exc_info=True)# try:
         #     self.write_image(
         #         robot_config.startup_image_name,
         #         robot_config.startup_image_path,
@@ -122,7 +126,6 @@ class Dodobot(Robot):
         #     )
         # except BaseException as e:
         #     logger.error(str(e), exc_info=True)
-        self.write("listdir", "/")
 
     def process_packet(self, category):
         super(Dodobot, self).process_packet(category)
@@ -185,6 +188,7 @@ class Dodobot(Robot):
         elif category == "listdir" and self.parse_segments("sd"):
             name = self.parsed_data[0]
             size = self.parsed_data[1]
+            self.sd_card_directory[name] = size
 
             logger.info("filename: %s, size: %s" % (name, size))
         elif category == "network" and self.parse_segments("d"):
@@ -289,18 +293,29 @@ class Dodobot(Robot):
             level_config = file.read()
         return level_config.encode()
 
+    def sd_card_listdir(self, dir="/"):
+        self.write("listdir", dir)
+        if not self.wait_for_ok():
+            logger.warn("Failed to receive ok signal for listdir: %s" % str(dir))
+            return False
+        return True
+
     def write_levels(self, dir_path):
-        try:
-            for filename in os.listdir(dir_path):
-                if "BREAK" not in filename.upper():
-                    continue
-                dest_name = os.path.splitext(filename)[0]
-                path = os.path.join(dir_path, filename)
-                level = self.load_level(path)
-                logger.info("Writing level %s to %s" % (path, dest_name))
-                self.write_sd(level, dest_name)
-        except BaseException as e:
-            logger.error(str(e), exc_info=True)
+        self.sd_card_listdir()
+        for filename in self.sd_card_directory:
+            filename = filename.decode()
+            if "BREAK" in filename.upper():
+                self.delete_sd(filename)
+
+        for filename in os.listdir(dir_path):
+            if "BREAK" not in filename.upper():
+                continue
+            dest_name = os.path.splitext(filename)[0]
+            path = os.path.join(dir_path, filename)
+            level = self.load_level(path)
+            logger.info("Writing level %s to %s" % (path, dest_name))
+            self.write_sd(level, dest_name)
+
 
     def reload_pid_ks(self):
         robot_config.load()
@@ -501,12 +516,26 @@ class Dodobot(Robot):
         logger.info("Writing image: %s" % len_img_bytes)
         self.write_sd(img_bytes, name)
 
+    def delete_sd(self, dest_name):
+        logger.info("Deleting file on SD: %s" % str(dest_name))
+        self.write("delete", dest_name)
+        if not self.wait_for_ok():
+            logger.warn("Failed to receive ok signal for delete SD file: %s" % str(dest_name))
+            return False
+        return True
+
     def write_sd(self, data, dest_name):
         if len(dest_name) == 0:
             logger.error("Destination name is empty!")
             return
-        if len(dest_name) > 12:
-            logger.warn("Destination file name is longer than 12 character. Name will be truncated on device")
+        name, ext = os.path.splitext(dest_name)
+        if len(name) > 8:
+            name = name[0:8]
+            logger.warn("Destination file name is longer than 8 characters. Name truncated to %s" % name)
+        if len(ext) > 3:
+            ext = ext[0:3]
+            logger.warn("Destination file extension is longer than 3 characters. Extension truncated to %s" % ext)
+        dest_name = ".".join((name, ext))
         if type(data) != bytes:
             logger.warn("Data is not bytes: %s" % str(data))
 
