@@ -117,7 +117,8 @@ class Dodobot(Robot):
         try:
             self.write_levels(robot_config.breakout_levels)
         except BaseException as e:
-            logger.error(str(e), exc_info=True)# try:
+            logger.error(str(e), exc_info=True)
+        # try:
         #     self.write_image(
         #         robot_config.startup_image_name,
         #         robot_config.startup_image_path,
@@ -306,16 +307,17 @@ class Dodobot(Robot):
             filename = filename.decode()
             if "BREAK" in filename.upper():
                 self.delete_sd(filename)
+            if "BR-" in filename.upper():
+                self.delete_sd(filename)
 
         for filename in os.listdir(dir_path):
-            if "BREAK" not in filename.upper():
+            if "BR-" not in filename.upper():
                 continue
             dest_name = os.path.splitext(filename)[0]
             path = os.path.join(dir_path, filename)
             level = self.load_level(path)
             logger.info("Writing level %s to %s" % (path, dest_name))
             self.write_sd(level, dest_name)
-
 
     def reload_pid_ks(self):
         robot_config.load()
@@ -500,7 +502,7 @@ class Dodobot(Robot):
             logger.info("A: %s, B: %s" % (cmd_A, cmd_B))
 
     def pre_serial_stop_callback(self):
-        pass   # stop any running tasks
+        pass  # stop any running tasks
 
     def write_image(self, name, path, size, quality=15):
         img_bytes = image.bytes_from_file(path, size, quality)
