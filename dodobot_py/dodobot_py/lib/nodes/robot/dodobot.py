@@ -305,8 +305,6 @@ class Dodobot(Robot):
         self.sd_card_listdir()
         for filename in self.sd_card_directory:
             filename = filename.decode()
-            if "BREAK" in filename.upper():
-                self.delete_sd(filename)
             if "BR-" in filename.upper():
                 self.delete_sd(filename)
 
@@ -531,6 +529,8 @@ class Dodobot(Robot):
             logger.error("Destination name is empty!")
             return
         name, ext = os.path.splitext(dest_name)
+        if len(ext) > 0:
+            ext = ext[1:]  # remove "."
         if len(name) > 8:
             name = name[0:8]
             logger.warn("Destination file name is longer than 8 characters. Name truncated to %s" % name)
