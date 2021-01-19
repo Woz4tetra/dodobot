@@ -1,7 +1,7 @@
 
 # Specific dirs
 
-# data
+data
 *.csv
 
 # Byte-compiled / optimized / DLL files
