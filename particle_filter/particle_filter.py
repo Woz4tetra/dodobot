@@ -31,12 +31,12 @@ class ParticleFilter:
         for state_num in range(self.num_states):
             self.particles[:, state_num] = mean[state_num] + randn(self.N) * var[state_num]
 
-    def predict(self, u, std):
+    def predict(self, u, std, dt):
         """ move according to control input u (velocity of robot and velocity of object)
         with noise std"""
 
         for state_num in range(self.num_states):
-            self.particles[:, state_num] += u[state_num] + randn(self.N) * std[state_num]
+            self.particles[:, state_num] += u[state_num] * dt + randn(self.N) * std[state_num]
 
     def update(self, z):
         """Update particle filter according to measurement z (object position)"""
@@ -81,6 +81,26 @@ class ParticleFilter:
     def mean(self):
         """ returns weighted mean position"""
         return np.average(self.particles[:, 0:3], weights=self.weights, axis=0)
+
+
+def neff(weights):
+    return 1. / np.sum(np.square(weights))
+
+
+def systemic_resample(w):
+    N = len(w)
+    Q = np.cumsum(w)
+    indexes = np.zeros(N, 'int')
+    t = np.linspace(0, 1 - 1 / N, N) + random() / N
+
+    i, j = 0, 0
+    while i < N and j < N:
+        while Q[j] < t[i]:
+            j += 1
+        indexes[i] = j
+        i += 1
+
+    return indexes
 
 
 def plot_pf(pf, wlim=50, hlim=50, weights=True):

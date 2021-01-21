@@ -2,7 +2,7 @@ import math
 import time
 import matplotlib.pyplot as plt
 from state_loader import read_pkl
-from particle_filter import ParticleFilter, plot_pf
+from particle_filter import ParticleFilter, plot_pf, systemic_resample, neff
 
 
 class InputVector:
@@ -12,8 +12,10 @@ class InputVector:
         self.odom_t = 0.0
         self.cmd_vx = 0.0
         self.cmd_vy = 0.0
-        self.friction = -0.25
+        self.friction = 0.0
         self.u = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # input state vector
+
+        self.prev_stamp = None
 
         self.u[4] = self.friction
         self.u[5] = self.friction
@@ -22,14 +24,27 @@ class InputVector:
         self.odom_vx = state.vx
         self.odom_vy = state.vy
         self.odom_t = state.t
+        self.update_input()
 
     def update_cmd_vel(self, state):
         self.cmd_vx = state.vx * math.cos(self.odom_t)
         self.cmd_vy = state.vy * math.cos(self.odom_t)
+        self.update_input()
 
     def update_input(self):
         self.u[0] = -self.odom_vx + self.cmd_vx
         self.u[1] = -self.odom_vy + self.cmd_vy
+        # self.u[0] = self.cmd_vx
+        # self.u[1] = self.cmd_vy
+        # self.u[0] = -self.odom_vx
+        # self.u[1] = -self.odom_vy
+
+    def dt(self, timestamp):
+        if self.prev_stamp is None:
+            self.prev_stamp = timestamp
+        dt = timestamp - self.prev_stamp
+        self.prev_stamp = timestamp
+        return dt
 
 
 def draw_pf(pf, plot_w, plot_h, z, odom_state, dt):
@@ -56,6 +71,23 @@ def main():
     repickle = False
     states = read_pkl(path, repickle)
 
+    # t = []
+    # vx = []
+    # vy = []
+    # for state in states:
+    #     if state.type == "odom":
+    #         vx.append(state.vx)
+    #         vy.append(state.vy)
+    #         t.append(state.stamp)
+    #
+    # plt.plot(t, vx, label="vx")
+    # plt.plot(t, vy, label="vy")
+    # plt.legend()
+    # plt.show()
+    run_pf(states)
+
+
+def run_pf(states):
     plt.figure(1)
     draw_measurements = [[], []]
     for state in states:
@@ -64,15 +96,14 @@ def main():
             draw_measurements[1].append(state.y)
     plt.plot(draw_measurements[0], draw_measurements[1], marker='*', color='r', ms=10)
 
-    u_std_val = 0.05
-    meas_std_val = 1.0
+    meas_std_val = 0.01
     pf = ParticleFilter(500, meas_std_val)
 
     input_vector = InputVector()
-    u_std = [u_std_val] * pf.num_states
+    u_std = [0.005, 0.005, 0.005, 0.0, 0.0, 0.0]
 
-    plot_w = 5.0
-    plot_h = 5.0
+    plot_w = 3.0
+    plot_h = 3.0
 
     dt = 0.01  # plot pause timer
     plt.figure(2)
@@ -87,26 +118,34 @@ def main():
 
     sim_start_t = states[0].stamp
     real_start_t = time.time()
+
+    resample_timer = 0.0
+    resample_timeout = 0.25
+
     for state in states:
         if state.type == "odom":
             input_vector.update_odom(state)
-            pf.predict(input_vector.u, u_std)
+            pf.predict(input_vector.u, u_std, input_vector.dt(state.stamp))
             odom_state = state
         elif state.type == "cmd_vel":
             input_vector.update_cmd_vel(state)
-            pf.predict(input_vector.u, u_std)
+            print(input_vector.u)
+            pf.predict(input_vector.u, u_std, input_vector.dt(state.stamp))
             # cmd_vel_state = state
         elif state.type == "blue_cut_sphere":
             z[0] = state.x
             z[1] = state.y
             z[2] = state.z
             pf.update(z)
+
+        if neff(pf.weights) < pf.N / 2:
             pf.resample()
 
         sim_time = state.stamp
         real_time = time.time()
         sim_duration = sim_time - sim_start_t
         real_duration = real_time - real_start_t
+
         if sim_duration >= real_duration:
             draw_pf(pf, plot_w, plot_h, z, odom_state, dt)
 
