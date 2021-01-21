@@ -1,4 +1,5 @@
 import math
+import time
 import matplotlib.pyplot as plt
 from state_loader import read_pkl
 from particle_filter import ParticleFilter, plot_pf
@@ -63,27 +64,30 @@ def main():
             draw_measurements[1].append(state.y)
     plt.plot(draw_measurements[0], draw_measurements[1], marker='*', color='r', ms=10)
 
-    u_std_val = 0.1
+    u_std_val = 0.05
     meas_std_val = 1.0
-    pf = ParticleFilter(1000, meas_std_val)
+    pf = ParticleFilter(500, meas_std_val)
 
     input_vector = InputVector()
     u_std = [u_std_val] * pf.num_states
 
-    plot_w = 10.0
-    plot_h = 10.0
+    plot_w = 5.0
+    plot_h = 5.0
 
     dt = 0.01  # plot pause timer
     plt.figure(2)
     plot_pf(pf, plot_w, plot_h, weights=False)
     plt.pause(dt)
     plt.ion()
+    input()
 
     z = [0.0, 0.0, 0.0]  # measurement state vector
     odom_state = None
     # cmd_vel_state = None
 
-    for state in states[100:]:
+    sim_start_t = states[0].stamp
+    real_start_t = time.time()
+    for state in states:
         if state.type == "odom":
             input_vector.update_odom(state)
             pf.predict(input_vector.u, u_std)
@@ -99,7 +103,12 @@ def main():
             pf.update(z)
             pf.resample()
 
-        draw_pf(pf, plot_w, plot_h, z, odom_state, dt)
+        sim_time = state.stamp
+        real_time = time.time()
+        sim_duration = sim_time - sim_start_t
+        real_duration = real_time - real_start_t
+        if sim_duration >= real_duration:
+            draw_pf(pf, plot_w, plot_h, z, odom_state, dt)
 
     plt.ioff()
     plt.show()
