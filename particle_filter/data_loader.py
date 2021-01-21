@@ -1,4 +1,5 @@
 import json
+from scipy.spatial.transform import Rotation
 
 
 def iter_bag(path):
@@ -23,3 +24,13 @@ def get_key_recurse(tree, key, index):
         return tree[subfield]
     else:
         return get_key_recurse(tree[subfield], key, index + 1)
+
+
+def yaw_from_quat(quat):
+    r_mat = Rotation.from_quat([quat["x"], quat["y"], quat["z"], quat["w"]])
+    return r_mat.as_euler("xyz")[2]
+
+
+def header_to_stamp(header):
+    return header["secs"] + header["nsecs"] * 1E-9
+

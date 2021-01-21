@@ -1,98 +1,109 @@
+import math
 import matplotlib.pyplot as plt
-from scipy.spatial.transform import Rotation
-from data_loader import iter_bag, get_key
+from state_loader import read_pkl
+from particle_filter import ParticleFilter, plot_pf
 
 
-def yaw_from_quat(quat):
-    r_mat = Rotation.from_quat([quat["x"], quat["y"], quat["z"], quat["w"]])
-    return r_mat.as_euler("xyz")[2]
-
-
-def header_to_stamp(header):
-    return header["secs"] + header["nsecs"] * 1E-9
-
-
-OBJECT_NAMES = [
-    "BACKGROUND",
-    "cozmo_cube",
-    "blue_cut_sphere",
-    "red_cut_sphere",
-    "blue_low_bin",
-    "red_low_bin",
-    "blue_cube",
-    "red_cube",
-]
-
-
-class State:
+class InputVector:
     def __init__(self):
-        self.stamp = 0.0
-        self.x = 0.0
-        self.y = 0.0
-        self.z = 0.0
-        self.t = 0.0
-        self.vx = 0.0
-        self.vy = 0.0
-        self.vz = 0.0
-        self.vt = 0.0
+        self.odom_vx = 0.0
+        self.odom_vy = 0.0
+        self.odom_t = 0.0
+        self.cmd_vx = 0.0
+        self.cmd_vy = 0.0
+        self.friction = -0.25
+        self.u = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]  # input state vector
 
-    def __str__(self):
-        return f"(x={self.x}, y={self.y}, z={self.z}, t={self.t}, vx={self.vx}, vy={self.vy}, vz={self.vz}, vt={self.vt}) @ {self.stamp}"
+        self.u[4] = self.friction
+        self.u[5] = self.friction
+
+    def update_odom(self, state):
+        self.odom_vx = state.vx
+        self.odom_vy = state.vy
+        self.odom_t = state.t
+
+    def update_cmd_vel(self, state):
+        self.cmd_vx = state.vx * math.cos(self.odom_t)
+        self.cmd_vy = state.vy * math.cos(self.odom_t)
+
+    def update_input(self):
+        self.u[0] = -self.odom_vx + self.cmd_vx
+        self.u[1] = -self.odom_vy + self.cmd_vy
 
 
-odom_xs = []
-odom_ys = []
+def draw_pf(pf, plot_w, plot_h, z, odom_state, dt):
+    try:
+        mu, var = pf.estimate()
+    except ZeroDivisionError:
+        return
+    plot_pf(pf, plot_w, plot_h, weights=False)
+    plt.scatter(mu[0], mu[1], color='g', s=100)
+    plt.plot(z[0], z[1], marker='*', color='r', ms=10)
+    if odom_state is not None:
+        plt.plot(odom_state.x, odom_state.y, marker='*', color='b', ms=10)
 
-detect_xs = []
-detect_ys = []
+    plt.tight_layout()
 
-path = "data/objects_2021-01-06-23-36-19.json"
-# path = "data/objects_2021-01-06-23-37-06.json"
+    plt.pause(dt)
 
-for timestamp, topic, msg in iter_bag(path):
-    if topic == "/dodobot/cmd_vel":
-        state = State()
-        state.stamp = timestamp
-        state.vx = get_key(msg, "linear.x")
-        state.vy = get_key(msg, "linear.y")
-        state.vt = get_key(msg, "angular.z")
-        # print("cmd:", state)
 
-    elif topic == "/dodobot/odom":
-        state = State()
-        state.stamp = header_to_stamp(get_key(msg, "header.stamp"))
-        state.x = get_key(msg, "pose.pose.position.x")
-        state.y = get_key(msg, "pose.pose.position.y")
-        state.t = yaw_from_quat(get_key(msg, "pose.pose.orientation"))
+def main():
+    # path = "data/objects_2021-01-06-23-36-19.json"
+    path = "data/objects_2021-01-06-23-37-06.json"
 
-        state.vx = get_key(msg, "twist.twist.linear.x")
-        state.vy = get_key(msg, "twist.twist.linear.y")
-        state.vt = get_key(msg, "twist.twist.angular.z")
+    # repickle = True
+    repickle = False
+    states = read_pkl(path, repickle)
 
-        odom_xs.append(state.x)
-        odom_ys.append(state.y)
+    plt.figure(1)
+    draw_measurements = [[], []]
+    for state in states:
+        if state.type == "blue_cut_sphere":
+            draw_measurements[0].append(state.x)
+            draw_measurements[1].append(state.y)
+    plt.plot(draw_measurements[0], draw_measurements[1], marker='*', color='r', ms=10)
 
-        # print("odom:", state)
+    u_std_val = 0.1
+    meas_std_val = 1.0
+    pf = ParticleFilter(1000, meas_std_val)
 
-    elif topic == "/dodobot/detections":
-        stamp = header_to_stamp(get_key(msg, "header.stamp"))
-        detections = get_key(msg, "detections")
-        for detection in detections.values():
-            state = State()
-            state.stamp = stamp
-            object_id = get_key(detection, "results.0.id")
-            object_label = OBJECT_NAMES[object_id]
-            state.x = get_key(detection, "results.0.pose.pose.position.x")
-            state.y = get_key(detection, "results.0.pose.pose.position.y")
-            state.z = get_key(detection, "results.0.pose.pose.position.z")
+    input_vector = InputVector()
+    u_std = [u_std_val] * pf.num_states
 
-            # print(get_key(detection, "header.frame_id"))
-            # print("detect %s: %s" % (object_label, state))
+    plot_w = 10.0
+    plot_h = 10.0
 
-            if object_label == "blue_cut_sphere":
-                detect_xs.append(state.x)
-                detect_ys.append(state.y)
+    dt = 0.01  # plot pause timer
+    plt.figure(2)
+    plot_pf(pf, plot_w, plot_h, weights=False)
+    plt.pause(dt)
+    plt.ion()
 
-plt.plot(detect_xs, detect_ys)
-plt.plot(odom_xs, odom_ys)
-plt.show()
+    z = [0.0, 0.0, 0.0]  # measurement state vector
+    odom_state = None
+    # cmd_vel_state = None
+
+    for state in states[100:]:
+        if state.type == "odom":
+            input_vector.update_odom(state)
+            pf.predict(input_vector.u, u_std)
+            odom_state = state
+        elif state.type == "cmd_vel":
+            input_vector.update_cmd_vel(state)
+            pf.predict(input_vector.u, u_std)
+            # cmd_vel_state = state
+        elif state.type == "blue_cut_sphere":
+            z[0] = state.x
+            z[1] = state.y
+            z[2] = state.z
+            pf.update(z)
+            pf.resample()
+
+        draw_pf(pf, plot_w, plot_h, z, odom_state, dt)
+
+    plt.ioff()
+    plt.show()
+
+
+if __name__ == '__main__':
+    main()
