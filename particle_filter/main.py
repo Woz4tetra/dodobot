@@ -10,11 +10,14 @@ class InputVector:
     def __init__(self):
         self.odom_vx = 0.0
         self.odom_vy = 0.0
+        self.odom_vt = 0.0
         self.odom_t = 0.0
         self.cmd_vx = 0.0
         self.cmd_vy = 0.0
+        self.cmd_vt = 0.0
+        self.dist = 0.0
         self.friction = 0.0
-        self.u = [0.0, 0.0, 0.0]  # input state vector
+        self.u = [0.0, 0.0, 0.0]  # input state vector: dx, dy, dz
 
         self.prev_stamp = None
 
@@ -22,23 +25,38 @@ class InputVector:
         # self.u[5] = self.friction
 
     def update_odom(self, state):
-        self.odom_vx = state.vx
-        self.odom_vy = state.vy
-        self.odom_t = state.t
-        self.update_input()
+        dt = self.dt(state.stamp)
+        angle = -state.t
+        rot_mat = np.array([
+            [np.cos(angle), -np.sin(angle)],
+            [np.sin(angle), np.cos(angle)]
+        ])
+        velocity = np.array([state.vx, state.vy])
+        rot_vel = np.dot(rot_mat, velocity)
+        self.odom_vx = -rot_vel[0]
+        self.odom_vy = -rot_vel[1]  # ~0.0
+        self.odom_vt = -state.vt
+        # self.update_input(dt)
+
+        self.u[0] = self.odom_vx
+        self.u[1] = self.odom_vt
+
+        return dt
 
     def update_cmd_vel(self, state):
-        self.cmd_vx = state.vx * math.cos(self.odom_t)
-        self.cmd_vy = state.vy * math.cos(self.odom_t)
-        self.update_input()
+        dt = self.dt(state.stamp)
+        self.cmd_vx = -state.vx
+        self.cmd_vt = -state.vt
+        # self.update_input(dt)
+        return dt
 
-    def update_input(self):
-        # self.u[0] = -self.odom_vx + self.cmd_vx
-        # self.u[1] = -self.odom_vy + self.cmd_vy
+    def update_input(self, dt):
         # self.u[0] = self.cmd_vx
         # self.u[1] = self.cmd_vy
-        self.u[0] = -self.odom_vx
-        self.u[1] = -self.odom_vy
+        # self.u[0] = self.dist * np.cos(-self.odom_vt * dt) + self.odom_vx * dt
+        # self.u[1] = self.dist * np.sin(-self.odom_vt * dt)
+        self.u[0] = self.odom_vx
+        self.u[1] = self.odom_vt
         # self.u[2] = 0.0  # no Z velocity
         print(self.u)
 
@@ -53,16 +71,25 @@ class InputVector:
 def base_link_to_odom(odom_state, x, y):
     # angle = -odom_state.t
     angle = odom_state.t
-    rot_mat = np.array([
-        [np.cos(angle), -np.sin(angle)],
-        [np.sin(angle), np.cos(angle)]
+    tf_mat = np.array([
+        [np.cos(angle), -np.sin(angle), odom_state.x],
+        [np.sin(angle), np.cos(angle), odom_state.y],
+        [0.0, 0.0, 1.0]
     ])
-    # rot_mat = np.linalg.inv(rot_mat)
-    point = np.array([x, y])
-    tf_point = np.dot(rot_mat, point)
-    tf_point[0] += odom_state.x
-    tf_point[1] += odom_state.y
+    point = np.array([x, y, 1.0])
+    tf_point = np.dot(tf_mat, point)
     return tf_point
+
+    # rot_mat = np.array([
+    #     [np.cos(angle), -np.sin(angle)],
+    #     [np.sin(angle), np.cos(angle)]
+    # ])
+    # # rot_mat = np.linalg.inv(rot_mat)
+    # point = np.array([x, y])
+    # tf_point = np.dot(rot_mat, point)
+    # tf_point[0] += odom_state.x
+    # tf_point[1] += odom_state.y
+    # return tf_point
 
 
 def plot_pf_odom(pf, wlim, hlim, odom_state):
@@ -115,8 +142,8 @@ def draw_pf_base_link(pf, plot_w, plot_h, z, dt):
     plt.pause(dt)
 
 def main():
-    # path = "data/objects_2021-01-06-23-36-19.json"
-    path = "data/objects_2021-01-06-23-37-06.json"
+    path = "data/objects_2021-01-06-23-36-19.json"
+    # path = "data/objects_2021-01-06-23-37-06.json"
 
     # repickle = True
     repickle = False
@@ -139,17 +166,18 @@ def main():
 
 
 def run_pf(states):
-    plt.figure(1)
-    draw_measurements = [[], []]
+    # plt.figure(1)
+    # draw_measurements = [[], []]
     initial_state = None
     initial_range = [1.0, 1.0, 1.0]
     for state in states:
         if state.type == "blue_cut_sphere":
-            draw_measurements[0].append(state.x)
-            draw_measurements[1].append(state.y)
+            # draw_measurements[0].append(state.x)
+            # draw_measurements[1].append(state.y)
             if initial_state is None:
                 initial_state = [state.x, state.y, state.z]
-    plt.plot(draw_measurements[0], draw_measurements[1], marker='*', color='r', ms=10)
+                break
+    # plt.plot(draw_measurements[0], draw_measurements[1], marker='*', color='r', ms=10)
 
     meas_std_val = 0.01
     pf = ParticleFilter(500, meas_std_val)
@@ -162,10 +190,10 @@ def run_pf(states):
     plot_w = 3.0
     plot_h = 3.0
 
-    dt = 0.01  # plot pause timer
-    plt.figure(2)
+    plot_delay = 0.01  # plot pause timer
+    plt.figure(1)
 
-    plt.pause(dt)
+    plt.pause(plot_delay)
     plt.ion()
     input()
 
@@ -184,12 +212,12 @@ def run_pf(states):
         real_duration = real_time - real_start_t
 
         if state.type == "odom":
-            input_vector.update_odom(state)
-            pf.predict(input_vector.u, u_std, input_vector.dt(state.stamp))
+            dt = input_vector.update_odom(state)
+            pf.predict(input_vector.u, u_std, dt)
             odom_state = state
         # elif state.type == "cmd_vel":
-        #     input_vector.update_cmd_vel(state)
-        #     pf.predict(input_vector.u, u_std, input_vector.dt(state.stamp))
+        #     dt = input_vector.update_cmd_vel(state)
+        #     pf.predict(input_vector.u, u_std, dt)
         #     # cmd_vel_state = state
         elif state.type == "blue_cut_sphere":
             z = [state.x, state.y, state.z]
@@ -203,8 +231,8 @@ def run_pf(states):
             z = None
 
         if sim_duration >= real_duration:
-            draw_pf_odom(pf, plot_w, plot_h, z, odom_state, dt)
-            # draw_pf_base_link(pf, plot_w, plot_h, z, dt)
+            draw_pf_odom(pf, plot_w, plot_h, z, odom_state, plot_delay)
+            # draw_pf_base_link(pf, plot_w, plot_h, z, plot_delay)
 
     plt.ioff()
     plt.show()

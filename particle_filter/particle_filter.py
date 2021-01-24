@@ -34,9 +34,18 @@ class ParticleFilter:
     def predict(self, u, std, dt):
         """ move according to control input u (velocity of robot and velocity of object)
         with noise std"""
+        
+        # angular update
+        th_dot = u[1] * dt + randn(self.N) * std[1]
+        self.particles[:,0] = self.particles[:,0] * np.cos(th_dot) - self.particles[:,1] * np.sin(th_dot)
+        self.particles[:,1] = self.particles[:,0] * np.sin(th_dot) + self.particles[:,1] * np.cos(th_dot)
+        
+        # linear update
+        self.particles[:,0] += u[0] * dt + randn(self.N) * std[0]
 
-        for state_num in range(self.num_states):
-            self.particles[:, state_num] += u[state_num] * dt + randn(self.N) * std[state_num]
+        # for state_num in range(self.num_states):
+        #     self.particles[:, state_num] += u[state_num] * dt + randn(self.N) * std[state_num]
+        #     # self.particles[:, state_num] += u[state_num] + randn(self.N) * std[state_num]
 
     def update(self, z):
         """Update particle filter according to measurement z (object position)"""
