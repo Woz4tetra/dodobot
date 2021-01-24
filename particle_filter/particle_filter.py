@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 class ParticleFilter:
     def __init__(self, N, measure_std_error):
-        self.num_states = 6  # x, y, z, vx, vy, vz
+        self.num_states = 3  # x, y, z
         self.particles = np.empty((N, self.num_states))
         self.N = N
         self.R = measure_std_error
@@ -43,7 +43,7 @@ class ParticleFilter:
         self.weights.fill(1.0)
 
         # weight according to how far away the particle is from the measurement in x, y, z
-        for axis in range(2):
+        for axis in range(3):
             axis_val = self.particles[:, axis]
             self.weights *= scipy.stats.norm(axis_val, self.R).pdf(z[axis])
 
