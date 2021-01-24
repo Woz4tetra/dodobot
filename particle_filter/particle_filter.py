@@ -13,11 +13,7 @@ class ParticleFilter:
 
         # distribute particles randomly with uniform weight
         self.weights = np.empty(N)
-        # self.weights.fill(1./N)
-        '''self.particles[:, 0] = uniform(0, x_dim, size=N)
-        self.particles[:, 1] = uniform(0, y_dim, size=N)
-        self.particles[:, 2] = uniform(0, 2*np.pi, size=N)'''
-
+        
     def create_uniform_particles(self, initial_state, state_range):
         assert len(initial_state) == self.num_states
         assert len(state_range) == self.num_states
@@ -37,11 +33,13 @@ class ParticleFilter:
         
         # angular update
         th_dot = u[1] * dt + randn(self.N) * std[1]
-        self.particles[:,0] = self.particles[:,0] * np.cos(th_dot) - self.particles[:,1] * np.sin(th_dot)
-        self.particles[:,1] = self.particles[:,0] * np.sin(th_dot) + self.particles[:,1] * np.cos(th_dot)
+        self.particles[:, 0] = self.particles[:, 0] * np.cos(th_dot) - self.particles[:, 1] * np.sin(th_dot)
+        self.particles[:, 1] = self.particles[:, 0] * np.sin(th_dot) + self.particles[:, 1] * np.cos(th_dot)
         
         # linear update
-        self.particles[:,0] += u[0] * dt + randn(self.N) * std[0]
+        self.particles[:, 0] += u[0] * dt + randn(self.N) * std[0]
+
+        self.particles[:, 2] += u[2] * dt + randn(self.N) * std[2]
 
         # for state_num in range(self.num_states):
         #     self.particles[:, state_num] += u[state_num] * dt + randn(self.N) * std[state_num]
@@ -92,9 +90,12 @@ class ParticleFilter:
         return np.average(self.particles[:, 0:3], weights=self.weights, axis=0)
 
 
-def neff(weights):
-    return 1. / np.sum(np.square(weights))
+    def neff(self):
+        return 1. / np.sum(np.square(self.weights))
 
+    def check_resample(self):
+        if self.neff() < self.N / 2:
+            self.resample()
 
 def systemic_resample(w):
     N = len(w)
@@ -110,32 +111,3 @@ def systemic_resample(w):
         i += 1
 
     return indexes
-
-
-def plot_pf(pf, wlim=50, hlim=50, weights=True):
-    if weights:
-        a = plt.subplot(221)
-        a.cla()
-
-        plt.xlim(-wlim / 2, wlim / 2)
-        # plt.ylim(0, 1)
-        a.set_yticklabels('')
-        plt.scatter(pf.particles[:, 0], pf.weights, marker='.', s=1, color='k')
-        a.set_ylim(bottom=0)
-
-        a = plt.subplot(224)
-        a.cla()
-        a.set_xticklabels('')
-        plt.scatter(pf.weights, pf.particles[:, 1], marker='.', s=1, color='k')
-        plt.ylim(-hlim / 2, hlim / 2)
-        a.set_xlim(left=0)
-        # plt.xlim(0, 1)
-
-        a = plt.subplot(223)
-        a.cla()
-
-    else:
-        plt.cla()
-    plt.scatter(pf.particles[:, 0], pf.particles[:, 1], marker='.', s=1, color='k')
-    plt.xlim(-wlim / 2, wlim / 2)
-    plt.ylim(-hlim / 2, hlim / 2)
