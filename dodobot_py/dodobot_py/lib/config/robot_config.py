@@ -39,6 +39,7 @@ class RobotConfig(Config):
         self.startup_image_quality = 15
 
         self.wifi_name = "wlan0"
+        self.hotspot_name = "dodobot-host"
 
         super(RobotConfig, self).__init__("robot.yaml", base_dir)
 

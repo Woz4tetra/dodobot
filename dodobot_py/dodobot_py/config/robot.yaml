@@ -56,3 +56,4 @@ startup_image_size: [160, 108]
 startup_image_quality: 100
 
 wifi_name: "wlan0"
+hotspot_name: "dodobot-host"
