@@ -98,6 +98,7 @@ class Dodobot(Robot):
         self.sounds = None
 
         self.interface_name = robot_config.wifi_name
+        self.hotspot_name = robot_config.hotspot_name
         self.network_proxy = NetworkProxy()
 
     def start(self):
@@ -207,6 +208,15 @@ class Dodobot(Robot):
                 self.write_network_info()
             elif command_type == 2:  # get list of networks
                 self.write_network_list()
+            elif command_type == 3:  # set hotspot state
+                if self.parse_next_segment("d"):
+                    hotspot_state = bool(self.parsed_data[1])
+                    logger.info("Turning hotspot %s" % ("on" if hotspot_state else "off"))
+                    output = self.network_proxy.set_hotspot_state(hotspot_state, self.hotspot_name)
+                    time.sleep(0.01)  # wait for command to propagate
+                    if output:
+                        logger.info("Result: %s" % str(output))
+
 
     def open_gripper(self, position=None):
         logger.debug("Sending gripper open command: %s" % str(position))
@@ -328,10 +338,12 @@ class Dodobot(Robot):
     def write_network_info(self):
         info, devices = self.network_proxy.get_report()
         wifi_state = self.network_proxy.get_radio_state()
+        hotspot_state = self.network_proxy.get_hotspot_state(self.interface_name, self.hotspot_name)
         logger.info("Writing networking info:\n%s" % info)
         logger.info("Wifi state: %s" % wifi_state)
+        logger.info("Hotspot state: %s" % hotspot_state)
 
-        self.write("network", int(wifi_state), str(info))
+        self.write("network", int(wifi_state), int(hotspot_state), str(info))
 
     def write_network_list(self):
         info = self.network_proxy.get_list_report(self.interface_name, 15)

@@ -14,6 +14,8 @@ class NetworkProxy:
         self.wifi_off_command = "nmcli radio wifi off".split(" ")
         self.list_wifi_command = "nmcli -m multiline dev wifi list".split(" ")
         self.rescan_wifi_command = "nmcli dev wifi rescan".split(" ")
+        self.hotspot_off_command = "nmcli con down %s"
+        self.hotspot_on_command = "nmcli con up %s"
 
         self.device_regex = r"GENERAL\.DEVICE:(.*)"  # interface name
         self.device_state_regex = r"GENERAL\.STATE:.*\((.*)\)"  # connected or not
@@ -52,8 +54,8 @@ class NetworkProxy:
         for index in range(len(devices)):
             report[devices[index]] = conn_states[index]
         return report
-
-    def get_interface_info(self, interface_name):
+    
+    def connection_report(self, interface_name):
         result = subprocess.run(self.connection_cmd + [str(interface_name)], stdout=subprocess.PIPE)
         output = result.stdout.decode()
 
@@ -79,7 +81,11 @@ class NetworkProxy:
         match = re.search(self.ip_address, output)
         if match:
             ip_address = match.group(1).strip()
+        
+        return device_name, device_state, connection_state, ip_address
 
+    def get_interface_info(self, interface_name):
+        device_name, device_state, connection_state, ip_address = self.connection_report(interface_name)
         report = f"{device_name} {device_state}\n{connection_state}\n{ip_address}"
         return report
 
@@ -117,12 +123,28 @@ class NetworkProxy:
         result = subprocess.run(self.wifi_state_command, stdout=subprocess.PIPE)
         output = result.stdout.decode()
         return "enabled" in output
+    
+    def get_hotspot_state(self, interface_name, hotspot_name):
+        _, _, connection_state, _ = self.connection_report(interface_name)
+        return hotspot_name in connection_state
 
     def set_radio_state(self, state):
         if state:
             cmd = self.wifi_on_command
         else:
             cmd = self.wifi_off_command
+        result = subprocess.run(cmd, stdout=subprocess.PIPE)
+        output = result.stdout.decode()
+        return output
+    
+    def set_hotspot_state(self, state, hotspot_name):
+        # https://gist.github.com/narate/d3f001c97e1c981a59f94cd76f041140
+        # https://unix.stackexchange.com/questions/400382/nmcli-disconnect-without-turning-wifi-card-off
+        if state:
+            cmd = self.hotspot_on_command % hotspot_name
+        else:
+            cmd = self.hotspot_off_command % hotspot_name
+        cmd = cmd.split(" ")
         result = subprocess.run(cmd, stdout=subprocess.PIPE)
         output = result.stdout.decode()
         return output
