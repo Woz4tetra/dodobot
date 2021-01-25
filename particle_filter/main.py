@@ -50,7 +50,9 @@ class InputVector:
 
 def main():
     # path = "data/objects_2021-01-06-23-36-19.json"
-    path = "data/objects_2021-01-06-23-37-06.json"
+    # path = "data/objects_2021-01-06-23-37-06.json"
+    # path = "data/objects_2021-01-24-18-58-26.json"
+    path = "data/objects_2021-01-24-18-59-28.json"
 
     # repickle = True
     repickle = False
@@ -62,10 +64,12 @@ def run_pf(states):
     initial_state = None
     initial_range = [1.0, 1.0, 1.0]
     for state in states:
-        if state.type == "blue_cut_sphere":
+        # if state.type == "blue_cut_sphere":
+        if state.type == "red_cut_sphere":
             if initial_state is None:
                 initial_state = [state.x, state.y, state.z]
                 break
+    assert initial_state is not None
     meas_std_val = 0.01
     pf = ParticleFilter(250, meas_std_val)
     plotter = ParticleFilterPlotter(pf, 3.0, 3.0, 3.0)
@@ -82,7 +86,7 @@ def run_pf(states):
     real_start_t = time.time()
 
     plotter.init()
-    input()
+    # input()
 
     for state in states:
         sim_time = state.stamp
@@ -94,7 +98,8 @@ def run_pf(states):
             dt = input_vector.update(state)
             pf.predict(input_vector.u, u_std, dt)
             plotter.update_odom(state)
-        elif state.type == "blue_cut_sphere":
+        # elif state.type == "blue_cut_sphere":
+        elif state.type == "red_cut_sphere":
             z = [state.x, state.y, state.z]
             pf.update(z)
             prev_z_update_t = sim_duration

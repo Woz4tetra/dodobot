@@ -14,6 +14,7 @@ def get_pkl_path(path):
 
 def make_pkl(path):
     states = []
+    print("Creating pickle from %s" % path)
 
     for timestamp, topic, msg in iter_bag(path):
         if topic == "/dodobot/cmd_vel":
@@ -46,18 +47,20 @@ def make_pkl(path):
                 object_id = get_key(detection, "results.0.id")
                 object_label = OBJECT_NAMES[object_id]
 
-                if object_label == "blue_cut_sphere":
-                    state = State()
-                    state.type = "blue_cut_sphere"
-                    state.stamp = stamp
-                    state.x = get_key(detection, "results.0.pose.pose.position.x")
-                    state.y = get_key(detection, "results.0.pose.pose.position.y")
-                    state.z = get_key(detection, "results.0.pose.pose.position.z")
+                # if object_label == "blue_cut_sphere":
+                state = State()
+                state.type = object_label
+                state.stamp = stamp
+                state.x = get_key(detection, "results.0.pose.pose.position.x")
+                state.y = get_key(detection, "results.0.pose.pose.position.y")
+                state.z = get_key(detection, "results.0.pose.pose.position.z")
 
-                    states.append(state)
+                states.append(state)
 
-    with open(get_pkl_path(path), 'wb') as file:
+    pickle_path = get_pkl_path(path)
+    with open(pickle_path, 'wb') as file:
         pickle.dump(states, file)
+    print("Pickle created: %s" % pickle_path)
 
     return states
 
