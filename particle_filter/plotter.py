@@ -129,7 +129,7 @@ class ParticleFilterPlotter2D(ParticleFilterPlotterBase):
         self.ax.scatter(self.odom_state.x, self.odom_state.y, marker='*', color='b', s=25)
 
         for name, meas_state in self.meas_states.items():
-            if self.odom_state.stamp - meas_state.stamp < 0.25:
+            if self.odom_state.stamp - meas_state.stamp < 1.0:
                 odom_meas = self.base_link_to_odom(self.odom_state, meas_state.x, meas_state.y, meas_state.z)
                 self.ax.scatter(odom_meas[0], odom_meas[1], marker='*', color='r', s=25)
 

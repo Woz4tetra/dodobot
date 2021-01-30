@@ -49,10 +49,21 @@ class InputVector:
 
 
 def main():
+    # simple, single object demo (blue_cut_sphere)
     # path = "data/objects_2021-01-06-23-36-19.json"
-    path = "data/objects_2021-01-06-23-37-06.json"
-    # path = "data/objects_2021-01-24-18-58-26.json"
-    # path = "data/objects_2021-01-24-18-59-28.json"
+    # path = "data/objects_2021-01-06-23-37-06.json"
+
+    # multi object
+    # path = "data/objects_2021-01-29-22-33-40.json"
+    # path = "data/objects_2021-01-29-22-59-23.json"
+
+    # pan-tilt demo
+    # path = "data/objects_2021-01-29-22-35-02.json"
+
+    # moving objects behind the robot's back
+    path = "data/objects_2021-01-29-23-06-04.json"
+
+    # moving objects in front of the robot
 
     # repickle = True
     repickle = False
@@ -68,9 +79,9 @@ def init_pf(num_particles, meas_std_val, initial_range, initial_state):
 
 def run_pf(states):
     initial_range = [1.0, 1.0, 1.0]
-    meas_std_val = 0.005
+    meas_std_val = 0.007
     num_particles = 250
-    u_std = [0.005, 0.005, 0.005]
+    u_std = [0.007, 0.007, 0.007]
 
     labels = [
         "BACKGROUND",
@@ -90,8 +101,12 @@ def run_pf(states):
     sim_start_t = states[0].stamp
     real_start_t = time.time()
 
-    # plotter = ParticleFilterPlotter3D(10.0, 10.0, 3.0)
-    plotter = ParticleFilterPlotter2D(3.0, 3.0)
+    x_width = 10.0
+    y_width = 10.0
+    z_width = 3.0
+
+    # plotter = ParticleFilterPlotter3D(x_width, y_width, z_width)
+    plotter = ParticleFilterPlotter2D(x_width, y_width)
 
     for state in states:
         sim_time = state.stamp
@@ -105,7 +120,9 @@ def run_pf(states):
                 pf.predict(input_vector.u, u_std, dt)
             plotter.update_odom(state)
         elif state.type in labels:
+        # elif state.type == "blue_cut_sphere":
             name = state.type
+            print(state)
             z = [state.x, state.y, state.z]
             if name not in pfs:
                 pf = init_pf(num_particles, meas_std_val, initial_range, z)
