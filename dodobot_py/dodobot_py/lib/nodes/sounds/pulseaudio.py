@@ -100,7 +100,7 @@ class Pacmd:
         self._run_cmd(["set-default-sink", self.sink])
 
     def _run_cmd(self, command: list):
-        p = Popen(["pacmd"] + command, stdout=PIPE)
+        p = Popen(["/usr/bin/pacmd"] + command, stdout=PIPE)
         output = p.communicate()[0]
         output = output.decode()
         logger.debug("pacmd output: '%s'" % output)
