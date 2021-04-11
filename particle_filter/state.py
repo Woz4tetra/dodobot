@@ -25,5 +25,7 @@ class State:
         self.vt = 0.0
 
     def __str__(self):
-        return f"<{self.type}>(x={self.x}, y={self.y}, z={self.z}, t={self.t}, vx={self.vx}, vy={self.vy}, vz={self.vz}, vt={self.vt}) @ {self.stamp}"
+        return f"<{self.type}>(" \
+               f"x={self.x:0.4f}, y={self.y:0.4f}, z={self.z:0.4f}, t={self.t:0.4f}, " \
+               f"vx={self.vx:0.4f}, vy={self.vy:0.4f}, vz={self.vz:0.4f}, vt={self.vt:0.4f}) @ {self.stamp}"
 
