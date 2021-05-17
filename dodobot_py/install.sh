@@ -13,9 +13,10 @@ chmod +x ${BASE_DIR}/copy.sh
 bash ${BASE_DIR}/copy.sh
 
 echo "Installing python dependencies"
-sudo apt-get install libatlas-base-dev  # for numpy
-sudo apt-get install ffmpeg  # for audio
+sudo apt-get install -y libatlas-base-dev  # for numpy
+sudo apt-get install -y ffmpeg  # for audio
 pip3 install -U -r ${SRC_DIR}/requirements.txt
+sudo -H pip3 install -U jetson-stats
 
 bash ${BASE_DIR}/systemd/install_systemd.sh
 

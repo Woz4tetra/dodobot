@@ -1,4 +1,5 @@
 pyserial
+Cython
 numpy
 evdev
 PyYAML
