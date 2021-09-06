@@ -45,6 +45,9 @@ class Dodobot(Robot):
         self.stepper_max_speed = robot_config.stepper_max_speed
         self.stepper_max_accel = robot_config.stepper_max_accel
 
+        self.prev_bumper1 = False
+        self.prev_bumper2 = False
+
         self.drive_max_speed = robot_config.drive_max_speed
         self.drive_min_speed = robot_config.drive_min_speed
         self.linear_vel_command = 0
@@ -184,9 +187,11 @@ class Dodobot(Robot):
         elif category == "bump" and self.parse_segments("udd"):
             bump1_state = self.parsed_data[1]
             bump2_state = self.parsed_data[2]
-            logger.info("bump 1: %s, 2: %s" % (bump1_state, bump2_state))
-            if bump1_state or bump2_state:
+            if (self.prev_bumper1 != bump1_state and bump1_state) or (self.prev_bumper2 != bump2_state and bump2_state):
+                logger.info("bump 1: %s, 2: %s" % (bump1_state, bump2_state))
                 self.sounds["bumper_sound"].play()
+            self.prev_bumper1 = bump1_state
+            self.prev_bumper2 = bump2_state
         elif category == "listdir" and self.parse_segments("sd"):
             name = self.parsed_data[0]
             size = self.parsed_data[1]
